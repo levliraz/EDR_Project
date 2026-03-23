@@ -29,11 +29,10 @@ def create_data_base():
             timestamp TEXT,
             file_type TEXT,
             file_name TEXT NOT NULL,
+            full_path TEXT NOT NULL,
             risk_score INTEGER,
             reasons TEXT,
             status TEXT,
-            process_name TEXT,
-            pid INTEGER,
             UNIQUE(agent_id, file_name) 
         )
     """)
@@ -108,6 +107,8 @@ def handle_register(list_data):
 
 
 def handle_alerts(list_data):
+    #f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
@@ -118,20 +119,19 @@ def handle_alerts(list_data):
     timestamp = list_data[2]
     file_type = list_data[3]
     file_name = list_data[4]
-    process_name = None if list_data[5].lower() == "null" else list_data[5]
-    pid = int(list_data[6]) if list_data[6].lower() != "null" else None
-    risk_score = int(list_data[7])
-    reasons = list_data[8]
-    status = list_data[9]
+    full_path = list_data[5]
+    risk_score = int(list_data[6])
+    reasons = list_data[7]
+    status = list_data[8]
 
-    print("Inserting alert:", agent_id, timestamp, file_type, file_name, process_name, pid, risk_score, reasons,
+    print("Inserting alert:", agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons,
           status)
 
     try:
         c.execute(
-            "INSERT INTO alerts (agent_id, timestamp, file_type, file_name, risk_score, reasons, status, process_name, pid) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (agent_id, timestamp, file_type, file_name, risk_score, reasons, status, process_name, pid)
+            "INSERT INTO alerts (agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons, status)
         )
         conn.commit()
         return f"Warning! A suspicious file named {file_name} was found on your computer."

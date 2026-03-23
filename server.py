@@ -136,17 +136,16 @@ class Server:
                         print("Cannot decode decrypted_bytes:", decrypted_bytes)
                         return
 
-                password = list_data[3]
                 print("list_data", list_data)
-                print("password", password)
+
                 command = list_data[0]
-                #print(command)
 
                 if not client_socket:
                     self.connect_users.remove(list_data)
 
                 if command == "agent":
-                    file_name = list_data[4]  # assuming structure: agent|agent_id|timestamp|type|file_name|...
+                    #f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
+                    file_name = list_data[4]
 
                     if (self.agent_id, file_name) not in self.already_alerted_files:
                         self.msg = users_data_base.handle_alerts(list_data)
@@ -235,10 +234,18 @@ class Server:
         c = conn.cursor()
 
         # שולפים רק את השורות ששייכות לסוכן הזה
-        c.execute("SELECT * FROM alerts WHERE agent_id = ?", (agent_id,))
-        row = c.fetchone()
+        # c.execute("SELECT * FROM alerts WHERE agent_id = ?", (agent_id,))
+        # row = c.fetchone()
 
-        while row:
+        c.execute("""
+            SELECT * FROM alerts 
+            WHERE agent_id = ? 
+            ORDER BY id ASC
+        """, (agent_id,))
+
+        rows = c.fetchall()
+
+        for row in rows:
             row_list = list(row)
             result = "|".join(map(str, row_list))
             client_socket.send(result.encode())

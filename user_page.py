@@ -1,18 +1,30 @@
 import wx
-
+import os
+import subprocess
 
 class UserPage:
-    def __init__(self,parent):
+    def __init__(self, parent):
         self.panel = wx.Panel(parent)
         self.vbox = wx.BoxSizer(wx.VERTICAL)
         self.panel.SetBackgroundColour(wx.Colour(255, 182, 193))
-        self.alerts_table = None  # טבלת ה-ListCtrl
+
+        # טבלת ה-ListCtrl
+        self.alerts_table = None
+        self.alerts_data = []
+
+        # שאר משתנים
         self.agent = None
         self.user_status_message = None
         self.btn_agent = None
         self.lbl_name = None
-        self.alerts_data = []
+        self.search_ctrl = None
+        self.panel_scrolled = None
         self.design = parent
+
+        # ===== יצירת טיימר לבדיקה אוטומטית של קבצים שנמחקו =====
+        self.timer = wx.Timer()  # יוצרים את הטיימר
+        self.timer.Bind(wx.EVT_TIMER, self.check_deleted_files)  # מחברים אירוע טיימר לפונקציה
+        self.timer.Start(3000)  # כל 3 שניות
 
     def create_user_page(self):
         # פונט גדול
@@ -86,7 +98,21 @@ class UserPage:
             print(f"Total rows collected: {len(self.alerts_data)}")
             self.show_alerts_table()
 
+    # מזהה איזו שורה נלחצה, שולף את כתובת הקובץ ומציג אותו בסייר הקבצים(פתיחת חלון)
+    def on_row_click(self, event):
+        index = event.GetIndex()
+        file_path = self.alerts_table.GetItem(index, 4).GetText()
+
+        if os.path.exists(file_path):
+            # פותח את סייר הקבצים ומסמן את הקובץ
+            subprocess.run(f'explorer /select,"{file_path}"')
+        else:
+            print("הקובץ לא נמצא")
+
     def show_alerts_table(self):
+        # self.search_ctrl = wx.TextCtrl(self.panel, style=wx.TE_PROCESS_ENTER)
+        # self.search_ctrl.Bind(wx.EVT_TEXT, self.on_search)
+
         # ===== מחיקת כל מה שהיה קודם באזור הטבלה =====
         # אם קיים panel_scrolled ישן – מחק אותו
         if hasattr(self, 'panel_scrolled') and self.panel_scrolled:
@@ -108,25 +134,35 @@ class UserPage:
             style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_HRULES | wx.LC_VRULES
         )
 
-        columns = ["ID", "Timestamp", "Type", "File Name", "Risk", "Reason", "Status", "Process Name", "PID"]
-        columns_widths = [40, 170, 200, 350, 40, 250, 120, 220, 80]
+        #אירוע שקורה בלחיצה כפולה על שורה מהטבלה
+        self.alerts_table.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_row_click)
 
+
+        columns = ["ID", "Timestamp", "Type", "File Name", "File Path",  "Risk", "Reason", "Status"]
+        columns_widths = [40, 170, 170, 280, 300, 40, 250, 120]
+
+        #alert: ['16', '7f6ec056-c437-4f36-b80c-c72b397e78d8', '2026-03-18 13:47:47', 'application/javascript', 'JS.js', 'C:\\Users\\TLV\\Downloads\\project4omer\\project4omer\\JS\\JS.js', '20', 'Suspicious extension', 'in_progress']
+
+        #enumerate(columns) – זה פשוט נותן לנו מספר + שם של כל עמודה.
         for idx, col_name in enumerate(columns):
+            #InsertColumn(idx, col_name) – מוסיף עמודה חדשה במיקום idx עם הכותרת col_name.
             self.alerts_table.InsertColumn(idx, col_name)
             self.alerts_table.SetColumnWidth(idx, columns_widths[idx])
 
+        #self.alerts_data היא רשימה של רשימות. כל איבר ברשימה הזו הוא שורה אחת מהדאטהבייס
         for index, alert in enumerate(self.alerts_data):
             # סינון agent_id (אם הוא קיים במיקום 1)
             filtered_alert = alert[:1] + alert[2:] if len(alert) > 1 else alert
 
-            self.alerts_table.InsertItem(index, str(filtered_alert[0]))
+            #str(filtered_alert[0])
+            self.alerts_table.InsertItem(index, str(index + 1))
 
             for col_idx in range(1, len(filtered_alert)):
                 self.alerts_table.SetItem(index, col_idx, str(filtered_alert[col_idx]))
 
             # צביעה לפי Risk
             try:
-                risk = int(filtered_alert[4])  # Risk במיקום 4 אחרי הסינון
+                risk = int(filtered_alert[5])  # Risk במיקום 5 אחרי הסינון
                 if risk >= 50:
                     self.alerts_table.SetItemBackgroundColour(index, wx.Colour(255, 0, 0))
                 elif risk >= 30:
@@ -152,7 +188,22 @@ class UserPage:
         self.panel.Refresh()  # חשוב – מרענן את התצוגה
         self.panel.Update()  # עוזר לפעמים
 
+    def check_deleted_files(self, event):
+        if not self.alerts_table:
+            return  # אם עדיין אין טבלה – דלג
 
+        rows_to_delete = []
+
+        for row in range(self.alerts_table.GetItemCount()):
+            file_path = self.alerts_table.GetItem(row, 4).GetText()
+            if not os.path.exists(file_path):
+                rows_to_delete.append(row)
+
+        for row in reversed(rows_to_delete):
+            self.alerts_table.DeleteItem(row)
+            # אם רוצים – נמחק גם מה-alerts_data
+            if row < len(self.alerts_data):
+                self.alerts_data.pop(row)
 
 
 

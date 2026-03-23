@@ -250,7 +250,7 @@ class Agent:
 
         for file in self.suspicious_files_to_send:
             print("246")
-            message = f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|null|null|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
+            message = f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
             encrypted_message = encryption.symmetric_encrypt_for_agent_server_message(self.my_fernet, message)
 
             try:

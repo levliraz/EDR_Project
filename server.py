@@ -243,20 +243,27 @@ class Server:
             ORDER BY id ASC
         """, (agent_id,))
 
-        rows = c.fetchall()
+        while True:
+            row = c.fetchone()
 
-        for row in rows:
+            if not row:
+                break
+
             row_list = list(row)
             result = "|".join(map(str, row_list))
+
             client_socket.send(result.encode())
 
-            if client_socket.recv(1024).decode() == "send more":
-                row = c.fetchone()
-            else:
+            try:
+                ack = client_socket.recv(1024).decode()
+
+                if ack != "send more":
+                    break
+
+            except:
                 break
 
         conn.close()
-        client_socket.send("END".encode())
 
 
 if __name__ == "__main__":

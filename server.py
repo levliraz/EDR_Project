@@ -15,6 +15,9 @@ class Server:
         self.msg = ""
         self.connect_users = []
 
+        #שמירת last_id לכל משתמש
+        self.last_sent_alert_id = {}
+
         self.agent_dic = {}
         self.user_dic = {}
         self.mac_agent_user_dic = {}
@@ -238,19 +241,31 @@ class Server:
         # row = c.fetchone()
 
         c.execute("""
-            SELECT * FROM alerts 
-            WHERE agent_id = ? 
+            SELECT * FROM alerts
+            WHERE agent_id = ?
             ORDER BY id ASC
         """, (agent_id,))
 
-        while True:
-            row = c.fetchone()
+       # last_id = self.last_sent_alert_id.get(user_id, 0)
+       #
+       #  c.execute("""
+       #      SELECT * FROM alerts
+       #      WHERE agent_id = ? AND id > ?
+       #      ORDER BY id ASC
+       #  """, (agent_id, last_id))
 
+
+        while True:
+            print("server:line 247")
+            row = c.fetchone()
+            print("row", row)
             if not row:
                 break
 
             row_list = list(row)
             result = "|".join(map(str, row_list))
+
+            print("result", result)
 
             client_socket.send(result.encode())
 

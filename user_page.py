@@ -20,6 +20,7 @@ class UserPage:
         self.lbl_name = None
         self.search_ctrl = None
         self.panel_scrolled = None
+        self.selected_file_path = None
         self.design = parent
 
         # ===== יצירת טיימר לבדיקה אוטומטית של קבצים שנמחקו =====
@@ -57,6 +58,13 @@ class UserPage:
         btn_disconnection.SetBackgroundColour(wx.Colour(255, 255, 255))
         btn_disconnection.SetFont(font_big)
         bottom_sizer.Add(btn_disconnection, 0, wx.RIGHT | wx.BOTTOM, 20)
+
+        #כפתור מחיקה של קובץ
+        self.delete_file_button = wx.Button(self.panel, label="מחק")
+        self.delete_file_button.SetBackgroundColour(wx.Colour(255, 200, 200))  # אדום בהיר
+        self.delete_file_button.Hide()  # בהתחלה מוסתר
+
+        self.delete_file_button.Bind(wx.EVT_BUTTON, self.delete_file)
 
         # חיבור אירוע- לחיצה על התחברות
         self.btn_agent.Bind(wx.EVT_BUTTON, self.on_agent_click)
@@ -106,7 +114,9 @@ class UserPage:
             list_data = raw_data.split("|")
             print("Added row:", list_data)
 
+            print("BEFORE CALLAFTER")
             wx.CallAfter(self.update_table, list_data)
+            print("AFTER CALLAFTER")
 
             self.design.my_socket.send("send more".encode())
 
@@ -116,13 +126,38 @@ class UserPage:
     # מזהה איזו שורה נלחצה, שולף את כתובת הקובץ ומציג אותו בסייר הקבצים(פתיחת חלון)
     def on_row_click(self, event):
         index = event.GetIndex()
-        file_path = self.alerts_table.GetItem(index, 4).GetText()
+        self.selected_file_path = self.alerts_table.GetItem(index, 4).GetText()
 
-        if os.path.exists(file_path):
-            # פותח את סייר הקבצים ומסמן את הקובץ
-            subprocess.run(f'explorer /select,"{file_path}"')
-        else:
-            print("הקובץ לא נמצא")
+        # מציג את הכפתור
+        self.delete_file_button.Show()
+        self.panel.Layout()
+
+    def delete_file(self, event):
+        if not self.selected_file_path:
+            return
+
+        dlg = wx.MessageDialog(
+            self.panel,
+            "האם אתה בטוח שתרצה למחוק את הקובץ?",
+            "אישור מחיקה",
+            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING
+        )
+
+        result = dlg.ShowModal()
+        dlg.Destroy()
+
+        if result == wx.ID_YES:
+            if os.path.exists(self.selected_file_path):
+                os.remove(self.selected_file_path)
+                print("נמחק בהצלחה")
+
+            else:
+                print("הקובץ לא נמצא")
+
+        self.delete_file_button.Hide()
+        self.panel.Layout()
+
+
 
     def show_alerts_table(self):
         # אם כבר קיימת טבלה לא לבנות מחדש
@@ -172,27 +207,41 @@ class UserPage:
                 self.alerts_data.pop(row)
 
     def update_table(self, list_data):
+        print("callAfter function")
+
         if not self.alerts_table:
             return
 
         # שמירת הנתונים בזיכרון
         self.alerts_data.append(list_data)
 
-        # חיתוך אינדקסים 0,1
-        filtered = list_data[:1] + list_data[2:] if len(list_data) > 2 else list_data
+        # בדיקת אורך בטיחות
+        if len(list_data) < 9:
+            print("Bad row:", list_data)
+            return
 
+        # אינדקס שורה
         index = self.alerts_table.GetItemCount()
+
+        print("line 226")
 
         # ID
         self.alerts_table.InsertItem(index, str(index + 1))
 
-        # שאר העמודות
-        for col_idx in range(1, len(filtered)):
-            self.alerts_table.SetItem(index, col_idx, str(filtered[col_idx]))
+        # עמודות
+        self.alerts_table.SetItem(index, 1, list_data[2])  # time
+        self.alerts_table.SetItem(index, 2, list_data[3])  # type
+        self.alerts_table.SetItem(index, 3, list_data[4])  # name
+        self.alerts_table.SetItem(index, 4, list_data[5])  # path
+        self.alerts_table.SetItem(index, 5, list_data[6])  # risk
+        self.alerts_table.SetItem(index, 6, list_data[7])  # reason
+        self.alerts_table.SetItem(index, 7, list_data[8])  # status
+
+        print("line 240")
 
         # צבע לפי Risk
         try:
-            risk = int(filtered[5])
+            risk = int(list_data[6])  # 👈 לא filtered!
 
             if risk >= 50:
                 color = wx.Colour(255, 0, 0)
@@ -201,10 +250,17 @@ class UserPage:
             else:
                 color = wx.Colour(144, 238, 144)
 
+            print("line 253")
+
             self.alerts_table.SetItemBackgroundColour(index, color)
 
-        except:
-            pass
+        except Exception as e:
+            print("Risk error:", e)
+
+        self.alerts_table.Refresh()
+        self.panel_scrolled.Layout()
+        self.panel_scrolled.FitInside()
+        self.panel_scrolled.Refresh()
 
 
 

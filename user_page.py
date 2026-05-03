@@ -1,6 +1,5 @@
 import wx
 import os
-import subprocess
 import threading
 
 class UserPage:
@@ -158,7 +157,6 @@ class UserPage:
         self.panel.Layout()
 
 
-
     def show_alerts_table(self):
         # אם כבר קיימת טבלה לא לבנות מחדש
         if self.alerts_table:
@@ -199,12 +197,27 @@ class UserPage:
             file_path = self.alerts_table.GetItem(row, 4).GetText()
             if not os.path.exists(file_path):
                 rows_to_delete.append(row)
+                 # 👉 איסוף כל הנתונים מהשורה
+                row_data = []
 
+                for col in range(self.alerts_table.GetColumnCount()):
+                    cell_text = self.alerts_table.GetItem(row, col).GetText()
+                    row_data.append(cell_text)
+
+                # 👉 חיבור עם |
+                row_string = "|".join(row_data)
+
+                # 👉 הוספה לרשימה
+                self.send_rows_to_delete_for_server.append(row_string)
+
+        #עובר על שורות למחיקה, מוחק אותן מהטבלה, מוחק גם מהזיכרון ועושה זאת מהסוף להתחלה כדי לא לשבור אינדקסים
         for row in reversed(rows_to_delete):
             self.alerts_table.DeleteItem(row)
             # אם רוצים – נמחק גם מה-alerts_data
             if row < len(self.alerts_data):
                 self.alerts_data.pop(row)
+        print("rows_to_delete", rows_to_delete)
+
 
     def update_table(self, list_data):
         print("callAfter function")

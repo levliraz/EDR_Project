@@ -85,7 +85,7 @@ class Agent:
                 if self.sock.recv(1024).decode().startswith("agent,your key"):
 
                     self.agent_id = self.create_agent_id()
-                    agent_id_to_send = encryption.symmetric_encrypt_for_agent_server_message(self.my_fernet,self.agent_id)
+                    agent_id_to_send = encryption.symmetric_encrypt_for_agent_server_message(self.my_fernet, self.agent_id)
                     self.sock.send(agent_id_to_send)
                     if self.sock.recv(1024).decode() == "Hi agent_id":
                         self.sock.send(self.mac.encode())

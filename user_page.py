@@ -20,6 +20,9 @@ class UserPage:
         self.search_ctrl = None
         self.panel_scrolled = None
         self.selected_file_path = None
+        self.all_row_files = []
+        self.files_to_delete_in_server = []
+        self.all_files_map = {}
         self.design = parent
 
         # ===== יצירת טיימר לבדיקה אוטומטית של קבצים שנמחקו =====
@@ -112,15 +115,23 @@ class UserPage:
 
             list_data = raw_data.split("|")
             print("Added row:", list_data)
+            #ניצור רשימה של כל המידע שקיבלתי מהשרת על הקבצים
+            self.all_row_files.append(list_data)
 
-            print("BEFORE CALLAFTER")
-            wx.CallAfter(self.update_table, list_data)
-            print("AFTER CALLAFTER")
+            file_name = list_data[4]
+            file_path = list_data[5]
+
+            self.all_files_map[(file_name, file_path)] = list_data
+
+            # print("BEFORE CALLAFTER")
+            # wx.CallAfter(self.update_table, list_data)
+            # print("AFTER CALLAFTER")
+            self.update_table(list_data)
 
             self.design.my_socket.send("send more".encode())
 
         print(f"Total rows collected: {len(self.alerts_data)}")
-        # self.show_alerts_table()
+        #self.show_alerts_table()
 
     # מזהה איזו שורה נלחצה, שולף את כתובת הקובץ ומציג אותו בסייר הקבצים(פתיחת חלון)
     def on_row_click(self, event):
@@ -194,21 +205,49 @@ class UserPage:
         rows_to_delete = []
 
         for row in range(self.alerts_table.GetItemCount()):
+
+            file_name = self.alerts_table.GetItem(row, 3).GetText()
             file_path = self.alerts_table.GetItem(row, 4).GetText()
+
+            key = (file_name, file_path)
+
             if not os.path.exists(file_path):
+                print("missing file:", key)
+
+                row_data = self.all_files_map.get(key)
+
+                if row_data:
+                    msg = "|".join(row_data)
+                    self.design.my_socket.send(f"delete_alert|{msg}".encode())
+
+                    # מוחקים מהמילון
+                    del self.all_files_map[key]
+
+                # רק אחר כך מוסיפים למחיקה מהטבלה
                 rows_to_delete.append(row)
+
+         # מוחקים רק כאן — מהסוף להתחלה
+        for row in reversed(rows_to_delete):
+            self.alerts_table.DeleteItem(row)
+
+            if row < len(self.alerts_data):
+                self.alerts_data.pop(row)
+
                  # 👉 איסוף כל הנתונים מהשורה
                 row_data = []
-
-                for col in range(self.alerts_table.GetColumnCount()):
-                    cell_text = self.alerts_table.GetItem(row, col).GetText()
-                    row_data.append(cell_text)
-
-                # 👉 חיבור עם |
-                row_string = "|".join(row_data)
+                #
+                # for col in range(self.alerts_table.GetColumnCount()):
+                #     cell_text = self.alerts_table.GetItem(row, col).GetText()
+                #     row_data.append(cell_text)
+                #
+                # # 👉 חיבור עם |
+                # row_string = "|".join(row_data)
+                # print(row_string)
 
                 # 👉 הוספה לרשימה
-                self.send_rows_to_delete_for_server.append(row_string)
+                #self.send_rows_to_delete_for_server.append(row_string)
+
+        print("rows_to_delete", rows_to_delete)
 
         #עובר על שורות למחיקה, מוחק אותן מהטבלה, מוחק גם מהזיכרון ועושה זאת מהסוף להתחלה כדי לא לשבור אינדקסים
         for row in reversed(rows_to_delete):

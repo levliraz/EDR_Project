@@ -133,7 +133,6 @@ class Agent:
 
         time.sleep(5)  # השהייה לבדיקה, שלא ייסגר מיד
 
-
     def scan_path(self, path):
         try:
             if os.path.isfile(path):
@@ -143,12 +142,11 @@ class Agent:
                 for item in os.listdir(path):
                     full_path = os.path.join(path, item)
                     self.scan_path(full_path)
-                print("after for")
+                #print("after for")
 
         except PermissionError:
             # אין הרשאה – מדלגים
             return
-
 
     def check_suspicious_file(self, file_path):
         file_name = os.path.basename(file_path)
@@ -250,17 +248,17 @@ class Agent:
         print("self.suspicious_files_to_send:", self.suspicious_files_to_send)
 
         for file in self.suspicious_files_to_send:
-            print("246")
+            #print("246")
             message = f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
             encrypted_message = encryption.symmetric_encrypt_for_agent_server_message(self.my_fernet, message)
 
             try:
-                print("enc",encrypted_message)
+                print("enc", encrypted_message)
                 self.sock.send(encrypted_message)
-                print("254")
+                #print("254")
                 try:
                     self.sock.settimeout(5)
-                    print("237")
+                    #print("237")
                     data = self.sock.recv(1024).decode()
                     print("Server response:", data)
                 except socket.timeout:
@@ -270,6 +268,7 @@ class Agent:
 
         # אחרי שליחה – ננקה את הרשימה, כדי שלא נשלח שוב באותו סיבוב
         self.suspicious_files_to_send = []
+
 
 if __name__ == "__main__":
     Agent()

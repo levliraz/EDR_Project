@@ -48,7 +48,6 @@ class Server:
             client = Thread(target=self.handle_client, args=(client_socket, client_address), daemon=True)
             client.start()
 
-
     def handle_client(self, client_socket, client_address):
         # נשלח את המפתח הציבורי של השרת ללקוח לאחר "שהכנו" את המפתח הציבורי של השרת
         # שליחת המפתח הציבורי בלבד
@@ -70,8 +69,8 @@ class Server:
                 client_socket.send("agent,your key has arrived".encode())
 
                 decrypt_agent_id = client_socket.recv(1024)
-                self.agent_id = encryption.symmetric_decrypt_for_agent_server_message(self.decrypted_fernet_agent_key,
-                                  decrypt_agent_id)
+                self.agent_id = encryption.symmetric_decrypt_for_agent_server_message(self.decrypted_fernet_agent_key,  decrypt_agent_id)
+
                 client_socket.send("Hi agent_id".encode())
 
                 self.mac_agent = client_socket.recv(1024).decode('utf-8').strip()  # קוראים את ה-MAC ששלח הסוכן וממירים ל-string
@@ -93,7 +92,6 @@ class Server:
                 self.agent_dic[self.agent_id] = client_socket
                 print("agents", self.agent_dic)
 
-
             elif client_status == "GUI":
                 client_socket.send("welcome client!".encode())
                 decrypt_user_id = client_socket.recv(1024)
@@ -108,7 +106,6 @@ class Server:
                 print("users", self.user_dic)
 
                 self.stam()
-
 
             while True:
                 if client_status == "Agent":
@@ -157,7 +154,6 @@ class Server:
                         self.msg = f"File {file_name} already reported for this agent."
 
                 elif command == "client":
-                    #print("client")
                     user_id = list_data[4]
                     client_socket.send("hi client".encode())
                     if client_status == "GUI":
@@ -165,7 +161,6 @@ class Server:
                             self.handel_alerts_data(user_id)
 
                 elif command == "login":
-                    #print("login")
                     self.msg = users_data_base.handle_login(list_data, self.connect_users)
 
                     if client_socket and self.msg.startswith("Welcome"):
@@ -177,14 +172,13 @@ class Server:
                     print("connect_users", self.connect_users)
 
                 elif command == "register":
-                    #print("register")
                     self.msg = users_data_base.handle_register(list_data)
 
                 else:
                     self.msg = f"Unknown command: {command}"
 
                 # שליחת ההודעה חזרה ללקוח
-                print(self.msg)
+                print("msg", self.msg)
                 client_socket.send(self.msg.encode())
 
 
@@ -214,7 +208,6 @@ class Server:
 
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
         print("self.mac_agent_user_dic", self.mac_agent_user_dic)
-
 
     def handel_alerts_data(self, user_id):
         client_socket = self.user_dic[user_id]
@@ -246,15 +239,6 @@ class Server:
             ORDER BY id ASC
         """, (agent_id,))
 
-       # last_id = self.last_sent_alert_id.get(user_id, 0)
-       #
-       #  c.execute("""
-       #      SELECT * FROM alerts
-       #      WHERE agent_id = ? AND id > ?
-       #      ORDER BY id ASC
-       #  """, (agent_id, last_id))
-
-
         while True:
             print("server:line 247")
             row = c.fetchone()
@@ -285,5 +269,3 @@ if __name__ == "__main__":
     server = Server()
     server.start()
 
-
-#liraz|liraz@gmail.com|Liraz@28

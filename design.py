@@ -123,10 +123,8 @@ class MainFrame(wx.Frame):
         if self.my_socket:
             self.my_socket.send(encrypted_message)  # לא צריך להפוך לבייטים כי הוא כבר בייט
             data = self.my_socket.recv(1024).decode()
-            print(data)
+            print("data", data)
         return data
-
-
 
 
 if __name__ == "__main__":

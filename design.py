@@ -75,8 +75,10 @@ class MainFrame(wx.Frame):
 
     def create_user_id(self):
         # ניצור user_id ונשלח אותו לשרת.
-        #user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
-        user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
+        #במחשב שלי
+        user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
+        #במחשב בבית ספר
+        #user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
         self.user_id = None
         if os.path.exists(user_id_path):
             self.user_id = open(user_id_path, "r").read().strip()

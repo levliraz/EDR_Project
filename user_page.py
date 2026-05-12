@@ -233,28 +233,6 @@ class UserPage:
             if row < len(self.alerts_data):
                 self.alerts_data.pop(row)
 
-                 # 👉 איסוף כל הנתונים מהשורה
-                row_data = []
-                #
-                # for col in range(self.alerts_table.GetColumnCount()):
-                #     cell_text = self.alerts_table.GetItem(row, col).GetText()
-                #     row_data.append(cell_text)
-                #
-                # # 👉 חיבור עם |
-                # row_string = "|".join(row_data)
-                # print(row_string)
-
-                # 👉 הוספה לרשימה
-                #self.send_rows_to_delete_for_server.append(row_string)
-
-        print("rows_to_delete", rows_to_delete)
-
-        #עובר על שורות למחיקה, מוחק אותן מהטבלה, מוחק גם מהזיכרון ועושה זאת מהסוף להתחלה כדי לא לשבור אינדקסים
-        for row in reversed(rows_to_delete):
-            self.alerts_table.DeleteItem(row)
-            # אם רוצים – נמחק גם מה-alerts_data
-            if row < len(self.alerts_data):
-                self.alerts_data.pop(row)
         print("rows_to_delete", rows_to_delete)
 
 
@@ -275,8 +253,6 @@ class UserPage:
         # אינדקס שורה
         index = self.alerts_table.GetItemCount()
 
-        print("line 226")
-
         # ID
         self.alerts_table.InsertItem(index, str(index + 1))
 
@@ -289,7 +265,6 @@ class UserPage:
         self.alerts_table.SetItem(index, 6, list_data[7])  # reason
         self.alerts_table.SetItem(index, 7, list_data[8])  # status
 
-        print("line 240")
 
         # צבע לפי Risk
         try:
@@ -301,8 +276,6 @@ class UserPage:
                 color = wx.Colour(255, 255, 0)
             else:
                 color = wx.Colour(144, 238, 144)
-
-            print("line 253")
 
             self.alerts_table.SetItemBackgroundColour(index, color)
 

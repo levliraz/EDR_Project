@@ -46,8 +46,10 @@ class Agent:
 
     def create_agent_id(self):
         # נתיב תיקיית ה-Agent
-        #BASE_DIR = r"C:\Users\TLV\Documents\agent"
-        BASE_DIR = r"C:\Users\Pc2\Documents\agent"
+        #במחשב שלי
+        BASE_DIR = r"C:\Users\TLV\Documents\agent"
+        #במחשב הבית ספר
+        #BASE_DIR = r"C:\Users\Pc2\Documents\agent"
         FILES_DIR = os.path.join(BASE_DIR, "suspicious_files")
         agent_id_dir = os.path.join(BASE_DIR, "agent_id.txt")
         # קריאה או יצירה של agent_id
@@ -132,7 +134,8 @@ class Agent:
             print("Connection failed:", e)
 
         time.sleep(5)  # השהייה לבדיקה, שלא ייסגר מיד
-
+    # הפונקציה עוברת ברקורסיה על כל הקבצים הנמצאים בשולחן עבודה, מסמכים והורדות.
+    #כל קובת נשלח לבדיקה כדי לחשב את רמת הסיכון שלו
     def scan_path(self, path):
         try:
             if os.path.isfile(path):
@@ -142,7 +145,6 @@ class Agent:
                 for item in os.listdir(path):
                     full_path = os.path.join(path, item)
                     self.scan_path(full_path)
-                #print("after for")
 
         except PermissionError:
             # אין הרשאה – מדלגים

@@ -105,7 +105,7 @@ class Server:
                 self.user_dic[self.user_id] = client_socket
                 print("users", self.user_dic)
 
-                self.stam()
+                self.link_user_to_agent_session()
 
             while True:
                 if client_status == "Agent":
@@ -191,23 +191,26 @@ class Server:
                     self.connect_users.remove(self.user_id)
             print(f"Connection with {client_address} closed")
 
-    def stam(self):
-        # לוקחים את ה-MAC של ה-GUI (שנשלח מהלקוח) ומנקים
+    def link_user_to_agent_session(self):
+        # קבלת ה-MAC של המשתמש וניקוי ערכים מיותרים
         mac = self.mac_user.decode('utf-8').strip() if isinstance(self.mac_user, bytes) else self.mac_user.strip()
 
-        with lock:  # נעילה כדי למנוע בעיות אם כמה GUI מתחברים בו זמנית
-            if mac in self.mac_agent_user_dic:  # אם כבר יש רשומה למכונה הזו (כלומר הסוכן כבר התחבר)
+        # שימוש ב-Lock כדי למנוע התנגשויות בין Threads
+        with lock:
+            # אם כבר קיים Agent למחשב הזה
+            if mac in self.mac_agent_user_dic:
+
+                # אם המשתמש עדיין לא רשום לרשימת המשתמשים של אותו MAC
                 if self.user_id not in self.mac_agent_user_dic[mac]["users"]:
-                    # אם המשתמש הזה עדיין לא ברשימה – מוסיפים אותו
                     self.mac_agent_user_dic[mac]["users"].append(self.user_id)
                     print(f"הוספתי user {self.user_id} למכונה {mac}")
-            else:
-                # אם אין עדיין סוכן על המכונה הזו
-                print(f"אזהרה: GUI התחבר ממכונה {mac} אבל אין עדיין סוכן רשום על ה-MAC הזה!")
-                # כאן אפשר להוסיף התנהגות: לשלוח הודעה ללקוח "אין סוכן פעיל" וכו'
 
+            else:
+                # אם אין Agent שמחובר מהמחשב הזה
+                print(f"אזהרה: GUI התחבר ממכונה {mac} אבל אין עדיין סוכן רשום על ה-MAC הזה!")
+
+        # הדפסת מצב המילון לצורך בדיקה
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
-        print("self.mac_agent_user_dic", self.mac_agent_user_dic)
 
     def handel_alerts_data(self, user_id):
         client_socket = self.user_dic[user_id]

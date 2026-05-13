@@ -4,6 +4,7 @@ import users_data_base
 from cryptography.hazmat.primitives.asymmetric import rsa
 import encryption
 import sqlite3
+import time
 
 lock = Lock()
 
@@ -95,7 +96,7 @@ class Server:
             elif client_status == "GUI":
                 client_socket.send("welcome client!".encode())
                 decrypt_user_id = client_socket.recv(1024)
-                self.user_id = encryption.decryption_data(self.private_key, decrypt_user_id).decode()
+                self.user_id = encryption.decryption_data_in_server(self.private_key, decrypt_user_id).decode()
                 client_socket.send("Hi user_id".encode())
 
                 self.mac_user = client_socket.recv(1024).decode('utf-8').strip()
@@ -106,6 +107,23 @@ class Server:
                 print("users", self.user_dic)
 
                 self.link_user_to_agent_session()
+
+                # =====  אחרי שיש user_id, client_socket, ו-agent_id =====
+                #מוצאים את ה agent_id של המשתמש
+                # agent_id = None
+                # for mac, mac_entry in self.mac_agent_user_dic.items():
+                #     if self.user_id in mac_entry["users"]:
+                #         agent_id = mac_entry["agent_id"]
+                #         break
+                #
+                # # מתחילים thread שדוחף התראות חדשות ללקוח
+                # if agent_id:
+                #     push_thread = Thread(
+                #         target=self.start_pushing_alerts,
+                #         args=(self.user_id, client_socket, agent_id),
+                #         daemon=True
+                #     )
+                #     push_thread.start()
 
             while True:
                 if client_status == "Agent":
@@ -128,7 +146,7 @@ class Server:
                         print("Client disconnected")
                         return
 
-                    decrypted_bytes = encryption.decryption_data(self.private_key, data)
+                    decrypted_bytes = encryption.decryption_data_in_server(self.private_key, data)
 
                     try:
                         list_data = decrypted_bytes.decode("utf-8").split('|')
@@ -150,15 +168,36 @@ class Server:
                     if (self.agent_id, file_name) not in self.already_alerted_files:
                         self.msg = users_data_base.handle_alerts(list_data)
                         self.already_alerted_files.add((self.agent_id, file_name))
+
+                        for mac, mac_entry in self.mac_agent_user_dic.items():
+                            if mac_entry["agent_id"] == self.agent_id:
+                                users = mac_entry["users"]
+                                break
+
+                        for user_id in users:
+                            if user_id in self.user_dic:
+                                client_socket = self.user_dic[user_id]
+                                # עכשיו יש את הסוקט של הלקוח
+
+                        # הפיכת הרשימה למחרוזת לפני הצפנה
+                        message = "|".join(list_data)
+                        #encrypted_message = encryption.encryption_data_server_and_client(message, self.public_key)
+                        client_socket.send(message.encode())
+
                     else:
                         self.msg = f"File {file_name} already reported for this agent."
 
-                elif command == "client":
-                    user_id = list_data[4]
-                    client_socket.send("hi client".encode())
-                    if client_status == "GUI":
-                        if client_socket.recv(1024).decode().startswith("show me the"):
-                            self.handel_alerts_data(user_id)
+                # elif command == "client":
+                #     user_id = list_data[4]
+                #     client_socket.send("hi client".encode())
+                #     if client_status == "GUI":
+                #         if client_socket.recv(1024).decode().startswith("show me the"):
+                #             self.handel_alerts_data(user_id)
+
+                # elif command == "client":
+                #     user_id = list_data[4]
+                #     if client_status == "GUI":
+                #         self.handel_alerts_data(user_id)
 
                 elif command == "login":
                     self.msg = users_data_base.handle_login(list_data, self.connect_users)
@@ -197,7 +236,7 @@ class Server:
 
         # שימוש ב-Lock כדי למנוע התנגשויות בין Threads
         with lock:
-            # אם כבר קיים Agent למחשב הזה
+            # אם כבר קיים Agent למחשב הזהf
             if mac in self.mac_agent_user_dic:
 
                 # אם המשתמש עדיין לא רשום לרשימת המשתמשים של אותו MAC
@@ -212,60 +251,107 @@ class Server:
         # הדפסת מצב המילון לצורך בדיקה
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
 
-    def handel_alerts_data(self, user_id):
-        client_socket = self.user_dic[user_id]
-        print("client_socket", client_socket)
+    # def start_pushing_alerts(self, user_id, client_socket, agent_id):
+    #     """
+    #     רץ בthread נפרד לכל לקוח GUI.
+    #     כל 5 שניות בודק אם יש התראות חדשות ושולח אותן.
+    #     """
+    #     # מאתחלים last_id לאפס אם עדיין לא קיים למשתמש הזה
+    #     if user_id not in self.last_sent_alert_id:
+    #         self.last_sent_alert_id[user_id] = 0
+    #
+    #         while True:
+    #             time.sleep(5)
+    #
+    #             try:
+    #                 conn = sqlite3.connect("users.db")
+    #                 c = conn.cursor()
+    #
+    #                 last_id = self.last_sent_alert_id[user_id]
+    #
+    #                 # שולפים רק שורות חדשות שעדיין לא נשלחו
+    #                 c.execute("""
+    #                     SELECT * FROM alerts
+    #                     WHERE agent_id = ? AND id > ?
+    #                     ORDER BY id ASC
+    #                 """, (agent_id, last_id))
+    #
+    #                 rows = c.fetchall()
+    #                 conn.close()
+    #
+    #                 for row in rows:
+    #                     row_list = list(row)
+    #                     result = "|".join(map(str, row_list))
+    #                     encrypted = encryption.encryption_data_server_and_client(result, self.public_key)
+    #                     client_socket.send(encrypted)
+    #
+    #                     # מחכים לאישור מהלקוח
+    #                     ack = client_socket.recv(1024).decode()
+    #                     if ack != "send more":
+    #                         return
+    #
+    #                     # מעדכנים את ה-last_id לאחרון שנשלח
+    #                     self.last_sent_alert_id[user_id] = row[0]  # row[0] זה ה-id
+    #
+    #             except Exception as e:
+    #                 print(f"Push error for user {user_id}: {e}")
+    #                 return
 
-        # מחפשים איזה MAC מכיל את המשתמש הזה
-        agent_id = None
-        for mac, mac_entry in self.mac_agent_user_dic.items():
-            if user_id in mac_entry["users"]:
-                agent_id = mac_entry["agent_id"]
-                print(f"User {user_id} belongs to agent {agent_id} on MAC {mac}")
-                break
-
-        if not agent_id:
-            print(f"No agent found for user {user_id}!")
-            return
-
-        # מתחברים למסד הנתונים
-        conn = sqlite3.connect("users.db")
-        c = conn.cursor()
-
-        # שולפים רק את השורות ששייכות לסוכן הזה
-        # c.execute("SELECT * FROM alerts WHERE agent_id = ?", (agent_id,))
-        # row = c.fetchone()
-
-        c.execute("""
-            SELECT * FROM alerts
-            WHERE agent_id = ?
-            ORDER BY id ASC
-        """, (agent_id,))
-
-        while True:
-            print("server:line 247")
-            row = c.fetchone()
-            print("row", row)
-            if not row:
-                break
-
-            row_list = list(row)
-            result = "|".join(map(str, row_list))
-
-            print("result", result)
-
-            client_socket.send(result.encode())
-
-            try:
-                ack = client_socket.recv(1024).decode()
-
-                if ack != "send more":
-                    break
-
-            except:
-                break
-
-        conn.close()
+    # def handel_alerts_data(self, user_id):
+    #     client_socket = self.user_dic[user_id]
+    #     print("client_socket", client_socket)
+    #
+    #     # מחפשים איזה MAC מכיל את המשתמש הזה
+    #     agent_id = None
+    #     for mac, mac_entry in self.mac_agent_user_dic.items():
+    #         if user_id in mac_entry["users"]:
+    #             agent_id = mac_entry["agent_id"]
+    #             print(f"User {user_id} belongs to agent {agent_id} on MAC {mac}")
+    #             break
+    #
+    #     if not agent_id:
+    #         print(f"No agent found for user {user_id}!")
+    #         return
+    #
+    #     # מתחברים למסד הנתונים
+    #     conn = sqlite3.connect("users.db")
+    #     c = conn.cursor()
+    #
+    #     # שולפים רק את השורות ששייכות לסוכן הזה
+    #     # c.execute("SELECT * FROM alerts WHERE agent_id = ?", (agent_id,))
+    #     # row = c.fetchone()
+    #
+    #     c.execute("""
+    #         SELECT * FROM alerts
+    #         WHERE agent_id = ?
+    #         ORDER BY id ASC
+    #     """, (agent_id,))
+    #
+    #     while True:
+    #         print("server:line 247")
+    #         row = c.fetchone()
+    #         print("row", row)
+    #         if not row:
+    #             break
+    #
+    #         row_list = list(row)
+    #         result = "alerts|".join(map(str, row_list))
+    #
+    #         print("result", result)
+    #
+    #         result = encryption.encryption_data_server_and_client(result, self.public_key)
+    #         client_socket.send(result)
+    #
+    #         try:
+    #             ack = client_socket.recv(1024).decode()
+    #
+    #             if ack != "send more":
+    #                 break
+    #
+    #         except:
+    #             break
+    #
+    #     conn.close()
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ def server_asymmetric_encryption(public_key):
     return pem_public
 
 
-def encryption_data(message, server_public_key):
+def encryption_data_server_and_client(message, server_public_key):
     # הצפנה אסימטרית של המידע המועבר מהלקוח לשרת
     encrypted_data = server_public_key.encrypt(
             message.encode(),
@@ -38,7 +38,7 @@ def encryption_data(message, server_public_key):
     return encrypted_data
 
 
-def decryption_data(server_private_key, data):
+def decryption_data_in_server(server_private_key, data):
     #data כבר מסוג בייטס
     decrypted_bytes = server_private_key.decrypt(
                 data,
@@ -49,6 +49,19 @@ def decryption_data(server_private_key, data):
                 )
     )
     return decrypted_bytes
+
+
+def decryption_data_in_client(server_public_key, data):
+    decrypted_bytes = server_public_key.decrypt(
+        data,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return decrypted_bytes
+
 
 def encryption_password(password):
     password_bytes = password.encode('utf-8')  # str → bytes
@@ -79,6 +92,7 @@ def encryption_agent_key(server_public_key):
     )
     return encrypted_fernet_key, fernet
 
+
 def decryption_agent_key(server_private_key, encrypted_agent_key):
     # מפענחים עם המפתח הפרטי של השרת
     fernet_key = server_private_key.decrypt(
@@ -94,9 +108,9 @@ def decryption_agent_key(server_private_key, encrypted_agent_key):
     return fernet
 
 
-
 def symmetric_encrypt_for_agent_server_message(fernet, message: str) -> bytes:
     return fernet.encrypt(message.encode())
+
 
 def symmetric_decrypt_for_agent_server_message(fernet, data: bytes) -> str:
     return fernet.decrypt(data).decode()

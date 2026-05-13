@@ -10,7 +10,9 @@ import subprocess
 import uuid
 import os
 from getmac import get_mac_address
+from threading import Thread, Lock
 
+lock = Lock()
 
 class MainFrame(wx.Frame):
     def __init__(self):
@@ -20,12 +22,14 @@ class MainFrame(wx.Frame):
         self.Maximize()
         self.Center()
         self.Show()
+
         # יצירת סוקט שמחובר לשרת
         self.my_socket = socket.socket()
         self.my_socket.connect(("127.0.0.1", 1236))
 
         self.user_id = None
         self.create_user_id()
+        self.alerts_list = []
 
         self.mac = get_mac_address()
 
@@ -40,12 +44,20 @@ class MainFrame(wx.Frame):
 
         self.my_socket.send("GUI".encode())
         if self.my_socket.recv(1024).decode() == "welcome client!":
-            user_id_to_send = encryption.encryption_data(self.user_id, self.server_public_key)
+            print("line 47")
+            user_id_to_send = encryption.encryption_data_server_and_client(self.user_id, self.server_public_key)
             self.my_socket.send(user_id_to_send)
 
             if self.my_socket.recv(1024).decode() == "Hi user_id":
+                print("line 52")
                 self.my_socket.send(self.mac.encode())
+
                 if self.my_socket.recv(1024).decode() == "i got your mac":
+                    print("line 56")
+
+                    # מתחילים להאזין להתרעות מהשרת ברקע
+                    Thread(target=self.start_listening_to_server, daemon=True).start()
+                    print("line 60")
 
                     # הגדרת הפאנלים
                     self.home_page_obj = home_page.HomePage(self)
@@ -58,7 +70,6 @@ class MainFrame(wx.Frame):
 
                     self.user_page_obj = user_page.UserPage(self)
                     self.panel_user = self.user_page_obj.create_user_page()
-
 
                     # הגדרת ה-sizer הראשי של ה-frame
                     self.sizer = wx.BoxSizer(wx.VERTICAL)
@@ -73,12 +84,41 @@ class MainFrame(wx.Frame):
                     self.show_panel("home")
                     self.Show()
 
+    def start_listening_to_server(self):
+        with lock:
+            print("line 89")
+            counter = 1
+            while True:
+                try:
+                    print("counter =", counter)
+                    counter += 1
+                    print("line 94")
+                    with lock:
+                        data = self.my_socket.recv(2048)
+                        print("data:", data)
+                        if not data:
+                            break
+
+                    #decrypted = encryption.decryption_data_in_client(self.server_public_key, data)
+                    message = data.decode("utf-8")
+
+                    list_data = message.split("|")
+
+                    if list_data[0] == "agent":
+                        self.alerts_list.append(list_data)
+                        print("file_from_server:", list_data)
+
+                except Exception as e:
+                    print(f"Listener error: {e}")
+                    break
+            print("line 110")
+
     def create_user_id(self):
         # ניצור user_id ונשלח אותו לשרת.
         #במחשב שלי
-        user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
+        #user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
         #במחשב בבית ספר
-        #user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
+        user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
         self.user_id = None
         if os.path.exists(user_id_path):
             self.user_id = open(user_id_path, "r").read().strip()
@@ -117,15 +157,19 @@ class MainFrame(wx.Frame):
         self.Close()  # סגירת חלון ה־wx.Frame
 
     def send_and_receive_data(self, command, f_name, email, password):
+        print("line 152")
         data = "not work"
         print(password)
         message = f"{command}|{f_name}|{email}|{password}|{self.user_id}"
         print(message)
-        encrypted_message = encryption.encryption_data(message, self.server_public_key)
+        encrypted_message = encryption.encryption_data_server_and_client(message, self.server_public_key)
         if self.my_socket:
+            print("line 159")
             self.my_socket.send(encrypted_message)  # לא צריך להפוך לבייטים כי הוא כבר בייט
-            data = self.my_socket.recv(1024).decode()
-            print("data", data)
+            data = self.my_socket.recv(1024)
+            print("line 162")
+            data = encryption.decryption_data_in_client(self.server_public_key, data)
+            print("data-", data)
         return data
 
 

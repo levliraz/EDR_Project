@@ -51,17 +51,6 @@ def decryption_data_in_server(server_private_key, data):
     return decrypted_bytes
 
 
-def decryption_data_in_client(server_public_key, data):
-    decrypted_bytes = server_public_key.decrypt(
-        data,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
-    return decrypted_bytes
-
 
 def encryption_password(password):
     password_bytes = password.encode('utf-8')  # str → bytes
@@ -78,7 +67,6 @@ def generate_symmetric_key():
 
 
 def encryption_agent_key(server_public_key):
-
     fernet_key, fernet = generate_symmetric_key()
 
     # הצפנת המפתח הסימטרי עם RSA

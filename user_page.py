@@ -1,6 +1,5 @@
 import wx
 import os
-import threading
 
 class UserPage:
     def __init__(self, parent):
@@ -27,22 +26,19 @@ class UserPage:
         self.timer_for_delete = None
         self.delete_file_button = None
         self.timer_for_update = None
+        self.timer_for_fetch = None
 
-        # ===== יצירת טיימר לבדיקה אוטומטית של קבצים שנמחקו =====
-        # self.timer = wx.Timer()  # יוצרים את הטיימר
-        # self.timer.Bind(wx.EVT_TIMER, self.check_deleted_files)  # מחברים אירוע טיימר לפונקציה
-        # self.timer.Start(3000)  # כל 3 שניות
 
     def create_user_page(self):
-        # ===== יצירת טיימר לבדיקה אוטומטית של קבצים שנמחקו =====
+        # טיימר לשליחת בקשה לשרת כל דקה
+        self.timer_for_fetch = wx.Timer(self.panel)
+        self.panel.Bind(wx.EVT_TIMER, self.request_new_alerts, self.timer_for_fetch)
+        self.timer_for_fetch.Start(60_000)  # 60 שניות
+
+        #יצירת טיימר לבדיקה אוטומטית של קבצים שנמחקו
         self.timer_for_delete = wx.Timer(self.panel)  # יוצרים את הטיימר
         self.timer_for_delete.Bind(wx.EVT_TIMER, self.check_deleted_files)  # מחברים אירוע טיימר לפונקציה
         self.timer_for_delete.Start(3000)  # כל 3 שניות
-
-        #יצירת טיימר לעדכון טבלה
-        self.timer_for_update = wx.Timer(self.panel)
-        self.panel.Bind(wx.EVT_TIMER, self.check_new_alerts, self.timer_for_update)
-        self.timer_for_update.Start(3000)
 
         # פונט גדול
         font_big = wx.Font(18, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
@@ -89,7 +85,39 @@ class UserPage:
 
         self.vbox.Add(bottom_sizer, 0, wx.EXPAND)
         self.panel.SetSizer(self.vbox)
+
+        #נקרא לפונקציה שמפעילה ת'רד בשביל לקבל התרעות מהשרת
+        #self.start_alert_listener()
+
         return self.panel
+
+    def request_new_alerts(self, event=None):
+        print("line 100")
+        try:
+            data = self.design.send_and_receive_data("get_alerts", "null", "null", "null")
+
+            print("line 104")
+
+            if not data:
+                return
+
+            if data == "NO_ALERTS":
+                return
+
+            alerts_list = data.split("||")  # מפריד בין שורות
+
+            print("alerts_list:", alerts_list)
+
+            for alert in alerts_list:
+                print("alert:", alert)
+                if alert.strip():
+                    row = alert.split("|")
+                    print("row:", row)
+                    wx.CallAfter(self.update_table, row)
+
+        except Exception as e:
+            print("error fetching alerts:", e)
+
 
     def on_agent_click(self, event):
         self.lbl_name.Hide()
@@ -111,16 +139,7 @@ class UserPage:
         self.delete_file_button.Show()
         self.panel.Layout()
 
-    def check_new_alerts(self, event):
-        if not self.alerts_table:
-            return
 
-        current_count = self.alerts_table.GetItemCount()
-        all_alerts = self.design.alerts_list
-
-        if len(all_alerts) > current_count:
-            for row in all_alerts[current_count:]:
-                wx.CallAfter(self.update_table, row)
 
     def delete_file(self, event):
         if not self.selected_file_path:
@@ -146,6 +165,7 @@ class UserPage:
 
         self.delete_file_button.Hide()
         self.panel.Layout()
+
 
     def show_alerts_table(self):
         # אם כבר קיימת טבלה לא לבנות מחדש
@@ -176,6 +196,7 @@ class UserPage:
         self.vbox.Insert(3, self.panel_scrolled, 1, wx.EXPAND | wx.ALL, 10)
 
         self.panel.Layout()
+
 
     def check_deleted_files(self, event):
         if not self.alerts_table:
@@ -214,6 +235,7 @@ class UserPage:
 
         print("rows_to_delete", rows_to_delete)
 
+
     def update_table(self, list_data):
         if not self.alerts_table:
             return
@@ -222,7 +244,7 @@ class UserPage:
         self.alerts_data.append(list_data)
 
         # בדיקת אורך בטיחות
-        if len(list_data) < 9:
+        if len(list_data) < 8:
             print("Bad row:", list_data)
             return
 
@@ -233,17 +255,17 @@ class UserPage:
         self.alerts_table.InsertItem(index, str(index + 1))
 
         # עמודות
-        self.alerts_table.SetItem(index, 1, list_data[2])  # time
-        self.alerts_table.SetItem(index, 2, list_data[3])  # type
-        self.alerts_table.SetItem(index, 3, list_data[4])  # name
-        self.alerts_table.SetItem(index, 4, list_data[5])  # path
-        self.alerts_table.SetItem(index, 5, list_data[6])  # risk
-        self.alerts_table.SetItem(index, 6, list_data[7])  # reason
-        self.alerts_table.SetItem(index, 7, list_data[8])  # status
+        self.alerts_table.SetItem(index, 1, list_data[1])  # time
+        self.alerts_table.SetItem(index, 2, list_data[2])  # type
+        self.alerts_table.SetItem(index, 3, list_data[3])  # file name
+        self.alerts_table.SetItem(index, 4, list_data[4])  # path
+        self.alerts_table.SetItem(index, 5, list_data[5])  # risk
+        self.alerts_table.SetItem(index, 6, list_data[6])  # reason
+        self.alerts_table.SetItem(index, 7, list_data[7])  # status
 
         # צבע לפי Risk
         try:
-            risk = int(list_data[6])  # לא filtered!
+            risk = int(list_data[5])  # לא filtered!
 
             if risk >= 50:
                 color = wx.Colour(255, 0, 0)
@@ -261,115 +283,3 @@ class UserPage:
         self.panel_scrolled.Layout()
         self.panel_scrolled.FitInside()
         self.panel_scrolled.Refresh()
-
-
-
-    # def on_agent_click(self, event):
-    #     self.lbl_name.Hide()
-    #     self.btn_agent.Hide()
-    #     self.panel.Layout()
-    #
-    #     data = self.design.send_and_receive_data("client", "null", "null", "null")
-    #     if data == "hi client":
-    #         self.design.my_socket.send("showdata that the agent collectd me the ".encode())
-    #
-    #         self.alerts_data.clear()  # מנקה – מאפס דאטה
-    #
-    #         # יוצר טבלה פעם אחת (ריקה)
-    #         self.show_alerts_table()
-    #
-    #         # recv() הוא blocking function
-    #         # הוא עוצר את כל התוכנית עד שמגיע מידע מהשרת
-    #         # בלי תרד, ה־GUI נתקע. ב־ wxPython יש רק thread אחד שמותר לו לצייר ולעדכן את המסך:Main UI Thread
-    #         # עם תרד, הפונקציה של קבלת נתונים תרוץ ברקע, בלי לעצור את המסך
-    #
-    #         #  מתחיל thread שמקבל נתונים
-    #         threading.Thread(target=self.receive_data, daemon=True).start()
-    #
-    # def receive_data(self):
-    #     while True:
-    #         raw_data = self.design.my_socket.recv(2048).decode(errors='ignore').strip()
-    #         print("Received from server:", repr(raw_data))  # debug – תראי מה באמת מגיע
-    #
-    #         if not raw_data:
-    #             continue  # אם ריק – דלג
-    #
-    #         # סינון הודעות שלא שייכות לטבלה
-    #         if "|" not in raw_data:
-    #             print("Ignored non-table message:", raw_data)
-    #             continue
-    #
-    #         list_data = raw_data.split("|")
-    #         print("Added row:", list_data)
-    #         #ניצור רשימה של כל המידע שקיבלתי מהשרת על הקבצים
-    #         self.all_row_files.append(list_data)
-    #
-    #         file_name = list_data[4]
-    #         file_path = list_data[5]
-    #
-    #         self.all_files_map[(file_name, file_path)] = list_data
-    #
-    #         # print("BEFORE CALLAFTER")
-    #         # wx.CallAfter(self.update_table, list_data)
-    #         # print("AFTER CALLAFTER")
-    #         self.update_table(list_data)
-    #
-    #         self.design.my_socket.send("send more".encode())
-    #
-    #     print(f"Total rows collected: {len(self.alerts_data)}")
-    #     #self.show_alerts_table()
-
-
-    # def update_table(self, list_data):
-    #     print("callAfter function")
-    #
-    #     if not self.alerts_table:
-    #         return
-    #
-    #     # שמירת הנתונים בזיכרון
-    #     self.alerts_data.append(list_data)
-    #
-    #     # בדיקת אורך בטיחות
-    #     if len(list_data) < 9:
-    #         print("Bad row:", list_data)
-    #         return
-    #
-    #     # אינדקס שורה
-    #     index = self.alerts_table.GetItemCount()
-    #
-    #     # ID
-    #     self.alerts_table.InsertItem(index, str(index + 1))
-    #
-    #     # עמודות
-    #     self.alerts_table.SetItem(index, 1, list_data[2])  # time
-    #     self.alerts_table.SetItem(index, 2, list_data[3])  # type
-    #     self.alerts_table.SetItem(index, 3, list_data[4])  # name
-    #     self.alerts_table.SetItem(index, 4, list_data[5])  # path
-    #     self.alerts_table.SetItem(index, 5, list_data[6])  # risk
-    #     self.alerts_table.SetItem(index, 6, list_data[7])  # reason
-    #     self.alerts_table.SetItem(index, 7, list_data[8])  # status
-    #
-    #
-    #     # צבע לפי Risk
-    #     try:
-    #         risk = int(list_data[6])  # 👈 לא filtered!
-    #
-    #         if risk >= 50:
-    #             color = wx.Colour(255, 0, 0)
-    #         elif risk >= 30:
-    #             color = wx.Colour(255, 255, 0)
-    #         else:
-    #             color = wx.Colour(144, 238, 144)
-    #
-    #         self.alerts_table.SetItemBackgroundColour(index, color)
-    #
-    #     except Exception as e:
-    #         print("Risk error:", e)
-    #
-    #     self.alerts_table.Refresh()
-    #     self.panel_scrolled.Layout()
-    #     self.panel_scrolled.FitInside()
-    #     self.panel_scrolled.Refresh()
-
-
-

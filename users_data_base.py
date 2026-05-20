@@ -143,3 +143,24 @@ def handle_alerts(list_data):
 
     finally:
         conn.close()
+
+
+def get_alerts_by_agent(agent_id, last_id):
+    print("data_base_line 149")
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    query = """
+        SELECT id, agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons, status
+        FROM alerts
+        WHERE agent_id = ? AND id > ?
+        ORDER BY id ASC
+    """
+
+    cursor.execute(query, (agent_id, last_id))
+    rows = cursor.fetchall()
+    conn.close()
+
+    print("rows_in data_base:", rows)
+
+    return rows

@@ -3,8 +3,6 @@ from threading import Thread, Lock
 import users_data_base
 from cryptography.hazmat.primitives.asymmetric import rsa
 import encryption
-import sqlite3
-import time
 
 lock = Lock()
 
@@ -17,6 +15,7 @@ class Server:
         self.connect_users = []
 
         #שמירת last_id לכל משתמש
+        # לכל משתמש נשמר ה־ID האחרון שנשלח אליו
         self.last_sent_alert_id = {}
 
         self.agent_dic = {}
@@ -50,6 +49,9 @@ class Server:
             client.start()
 
     def handle_client(self, client_socket, client_address):
+        # משתנה זה מורה על כמות השורות של הקבצים החשודים של אותו לקוח במסד הנתונים.
+        flag = 0
+
         # נשלח את המפתח הציבורי של השרת ללקוח לאחר "שהכנו" את המפתח הציבורי של השרת
         # שליחת המפתח הציבורי בלבד
         pem_public = encryption.server_asymmetric_encryption(self.public_key)
@@ -78,16 +80,33 @@ class Server:
                 client_socket.send("i got your mac".encode())  # מאשרים לסוכן שקיבלנו
 
                 # כאן כבר יש לנו agent_id + mac → שומרים מיד!
-                with lock:  # נועלים כדי ששני ת'רדים לא יתנגשו בו זמנית
-                    mac = self.mac_agent.strip()  # מנקים רווחים מיותרים מסביב ל-MAC
-                    if mac not in self.mac_agent_user_dic:  # אם ה-MAC הזה עדיין לא קיים במילון
-                        self.mac_agent_user_dic[mac] = {  # יוצרים רשומה חדשה
-                            "agent_id": self.agent_id,  # שומרים את ה-agent_id שזה עתה קיבלנו
-                            "users": []  # רשימת משתמשים ריקה בהתחלה
+                # with lock:  # נועלים כדי ששני ת'רדים לא יתנגשו בו זמנית
+                #     mac = self.mac_agent.strip()  # מנקים רווחים מיותרים מסביב ל-MAC
+                #     if mac not in self.mac_agent_user_dic:  # אם ה-MAC הזה עדיין לא קיים במילון
+                #         self.mac_agent_user_dic[mac] = {  # יוצרים רשומה חדשה
+                #             "agent_id": self.agent_id,  # שומרים את ה-agent_id שזה עתה קיבלנו
+                #             "users": []  # רשימת משתמשים ריקה בהתחלה
+                #         }
+                #     elif self.mac_agent_user_dic[mac]["agent_id"] != self.agent_id:
+                #         # אם כבר יש MAC כזה אבל עם agent_id אחר – זה באג/תקלה
+                #         print(f"WARNING: אותו MAC עם agent_id שונה! {mac}")
+
+                with lock:
+                    mac = self.mac_agent.strip()
+                    # אם ה-MAC לא קיים עדיין
+                    if mac not in self.mac_agent_user_dic:
+
+                        self.mac_agent_user_dic[mac] = {
+                            "agent_id": self.agent_id,
+                            "users": []
                         }
-                    elif self.mac_agent_user_dic[mac]["agent_id"] != self.agent_id:
-                        # אם כבר יש MAC כזה אבל עם agent_id אחר – זה באג/תקלה
-                        print(f"WARNING: אותו MAC עם agent_id שונה! {mac}")
+                    else:
+                        # אם כבר יש MAC כזה
+                        # רק מעדכנים את ה-agent_id
+                        self.mac_agent_user_dic[mac]["agent_id"] = self.agent_id
+
+                    print("UPDATED mac_agent_user_dic:", self.mac_agent_user_dic)
+
 
                 # הוספתי למילון מפתח שהוא הuser_id והערך שלו הוא הסוקט של הלקוח המחובר כרגע
                 self.agent_dic[self.agent_id] = client_socket
@@ -108,22 +127,6 @@ class Server:
 
                 self.link_user_to_agent_session()
 
-                # =====  אחרי שיש user_id, client_socket, ו-agent_id =====
-                #מוצאים את ה agent_id של המשתמש
-                # agent_id = None
-                # for mac, mac_entry in self.mac_agent_user_dic.items():
-                #     if self.user_id in mac_entry["users"]:
-                #         agent_id = mac_entry["agent_id"]
-                #         break
-                #
-                # # מתחילים thread שדוחף התראות חדשות ללקוח
-                # if agent_id:
-                #     push_thread = Thread(
-                #         target=self.start_pushing_alerts,
-                #         args=(self.user_id, client_socket, agent_id),
-                #         daemon=True
-                #     )
-                #     push_thread.start()
 
             while True:
                 if client_status == "Agent":
@@ -169,35 +172,10 @@ class Server:
                         self.msg = users_data_base.handle_alerts(list_data)
                         self.already_alerted_files.add((self.agent_id, file_name))
 
-                        for mac, mac_entry in self.mac_agent_user_dic.items():
-                            if mac_entry["agent_id"] == self.agent_id:
-                                users = mac_entry["users"]
-                                break
-
-                        for user_id in users:
-                            if user_id in self.user_dic:
-                                client_socket = self.user_dic[user_id]
-                                # עכשיו יש את הסוקט של הלקוח
-
-                        # הפיכת הרשימה למחרוזת לפני הצפנה
-                        message = "|".join(list_data)
-                        #encrypted_message = encryption.encryption_data_server_and_client(message, self.public_key)
-                        client_socket.send(message.encode())
 
                     else:
                         self.msg = f"File {file_name} already reported for this agent."
 
-                # elif command == "client":
-                #     user_id = list_data[4]
-                #     client_socket.send("hi client".encode())
-                #     if client_status == "GUI":
-                #         if client_socket.recv(1024).decode().startswith("show me the"):
-                #             self.handel_alerts_data(user_id)
-
-                # elif command == "client":
-                #     user_id = list_data[4]
-                #     if client_status == "GUI":
-                #         self.handel_alerts_data(user_id)
 
                 elif command == "login":
                     self.msg = users_data_base.handle_login(list_data, self.connect_users)
@@ -212,6 +190,21 @@ class Server:
 
                 elif command == "register":
                     self.msg = users_data_base.handle_register(list_data)
+
+                elif command == "get_alerts":
+                    print("line 195")
+                    user_id = list_data[4]
+                    # שליפה ממסד הנתונים
+                    alerts = self.get_alerts_for_user(user_id)
+
+                    print("alerts:", alerts)
+
+                    if not alerts:
+                        client_socket.send("NO_ALERTS".encode())
+                        continue
+
+                    rows_as_strings = ["|".join(row) for row in alerts]
+                    self.msg = "||".join(rows_as_strings)
 
                 else:
                     self.msg = f"Unknown command: {command}"
@@ -231,127 +224,93 @@ class Server:
             print(f"Connection with {client_address} closed")
 
     def link_user_to_agent_session(self):
-        # קבלת ה-MAC של המשתמש וניקוי ערכים מיותרים
-        mac = self.mac_user.decode('utf-8').strip() if isinstance(self.mac_user, bytes) else self.mac_user.strip()
+        # ניקוי רווחים מה-MAC
+        mac = self.mac_user.strip()
 
-        # שימוש ב-Lock כדי למנוע התנגשויות בין Threads
         with lock:
-            # אם כבר קיים Agent למחשב הזהf
-            if mac in self.mac_agent_user_dic:
+            # אם ה-MAC עדיין לא קיים במילון
+            if mac not in self.mac_agent_user_dic:
+                # יוצרים רשומה חדשה
+                self.mac_agent_user_dic[mac] = {
+                    "agent_id": None,
+                    "users": []
+                }
 
-                # אם המשתמש עדיין לא רשום לרשימת המשתמשים של אותו MAC
-                if self.user_id not in self.mac_agent_user_dic[mac]["users"]:
-                    self.mac_agent_user_dic[mac]["users"].append(self.user_id)
-                    print(f"הוספתי user {self.user_id} למכונה {mac}")
+            # אם המשתמש עדיין לא קיים ברשימה
+            if self.user_id not in self.mac_agent_user_dic[mac]["users"]:
+                # מוסיפים אותו
+                self.mac_agent_user_dic[mac]["users"].append(self.user_id)
 
-            else:
-                # אם אין Agent שמחובר מהמחשב הזה
-                print(f"אזהרה: GUI התחבר ממכונה {mac} אבל אין עדיין סוכן רשום על ה-MAC הזה!")
+                print(f"Added user {self.user_id} to MAC {mac}")
 
-        # הדפסת מצב המילון לצורך בדיקה
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
 
-    # def start_pushing_alerts(self, user_id, client_socket, agent_id):
-    #     """
-    #     רץ בthread נפרד לכל לקוח GUI.
-    #     כל 5 שניות בודק אם יש התראות חדשות ושולח אותן.
-    #     """
-    #     # מאתחלים last_id לאפס אם עדיין לא קיים למשתמש הזה
-    #     if user_id not in self.last_sent_alert_id:
-    #         self.last_sent_alert_id[user_id] = 0
+    # def link_user_to_agent_session(self):
+    #     # קבלת ה-MAC של המשתמש וניקוי ערכים מיותרים
+    #     mac = self.mac_user.decode('utf-8').strip() if isinstance(self.mac_user, bytes) else self.mac_user.strip()
     #
-    #         while True:
-    #             time.sleep(5)
+    #     # שימוש ב-Lock כדי למנוע התנגשויות בין Threads
+    #     with lock:
+    #         #אם כבר קיים Agent למחשב הזה
+    #         if mac in self.mac_agent_user_dic:
     #
-    #             try:
-    #                 conn = sqlite3.connect("users.db")
-    #                 c = conn.cursor()
+    #             # אם המשתמש עדיין לא רשום לרשימת המשתמשים של אותו MAC
+    #             if self.user_id not in self.mac_agent_user_dic[mac]["users"]:
+    #                 self.mac_agent_user_dic[mac]["users"].append(self.user_id)
+    #                 print(f"הוספתי user {self.user_id} למכונה {mac}")
     #
-    #                 last_id = self.last_sent_alert_id[user_id]
+    #         else:
+    #             # אם אין Agent שמחובר מהמחשב הזה
+    #             print(f"אזהרה: GUI התחבר ממכונה {mac} אבל אין עדיין סוכן רשום על ה-MAC הזה!")
     #
-    #                 # שולפים רק שורות חדשות שעדיין לא נשלחו
-    #                 c.execute("""
-    #                     SELECT * FROM alerts
-    #                     WHERE agent_id = ? AND id > ?
-    #                     ORDER BY id ASC
-    #                 """, (agent_id, last_id))
-    #
-    #                 rows = c.fetchall()
-    #                 conn.close()
-    #
-    #                 for row in rows:
-    #                     row_list = list(row)
-    #                     result = "|".join(map(str, row_list))
-    #                     encrypted = encryption.encryption_data_server_and_client(result, self.public_key)
-    #                     client_socket.send(encrypted)
-    #
-    #                     # מחכים לאישור מהלקוח
-    #                     ack = client_socket.recv(1024).decode()
-    #                     if ack != "send more":
-    #                         return
-    #
-    #                     # מעדכנים את ה-last_id לאחרון שנשלח
-    #                     self.last_sent_alert_id[user_id] = row[0]  # row[0] זה ה-id
-    #
-    #             except Exception as e:
-    #                 print(f"Push error for user {user_id}: {e}")
-    #                 return
+    #     # הדפסת מצב המילון לצורך בדיקה
+    #     print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
 
-    # def handel_alerts_data(self, user_id):
-    #     client_socket = self.user_dic[user_id]
-    #     print("client_socket", client_socket)
-    #
-    #     # מחפשים איזה MAC מכיל את המשתמש הזה
-    #     agent_id = None
-    #     for mac, mac_entry in self.mac_agent_user_dic.items():
-    #         if user_id in mac_entry["users"]:
-    #             agent_id = mac_entry["agent_id"]
-    #             print(f"User {user_id} belongs to agent {agent_id} on MAC {mac}")
-    #             break
-    #
-    #     if not agent_id:
-    #         print(f"No agent found for user {user_id}!")
-    #         return
-    #
-    #     # מתחברים למסד הנתונים
-    #     conn = sqlite3.connect("users.db")
-    #     c = conn.cursor()
-    #
-    #     # שולפים רק את השורות ששייכות לסוכן הזה
-    #     # c.execute("SELECT * FROM alerts WHERE agent_id = ?", (agent_id,))
-    #     # row = c.fetchone()
-    #
-    #     c.execute("""
-    #         SELECT * FROM alerts
-    #         WHERE agent_id = ?
-    #         ORDER BY id ASC
-    #     """, (agent_id,))
-    #
-    #     while True:
-    #         print("server:line 247")
-    #         row = c.fetchone()
-    #         print("row", row)
-    #         if not row:
-    #             break
-    #
-    #         row_list = list(row)
-    #         result = "alerts|".join(map(str, row_list))
-    #
-    #         print("result", result)
-    #
-    #         result = encryption.encryption_data_server_and_client(result, self.public_key)
-    #         client_socket.send(result)
-    #
-    #         try:
-    #             ack = client_socket.recv(1024).decode()
-    #
-    #             if ack != "send more":
-    #                 break
-    #
-    #         except:
-    #             break
-    #
-    #     conn.close()
+
+    def get_alerts_for_user(self, user_id):
+        print("line 248")
+        agent_id = None
+
+        for mac, data in self.mac_agent_user_dic.items():
+            if user_id in data["users"]:
+                agent_id = data["agent_id"]
+                break
+
+        if not agent_id:
+            return []
+
+        # ה-ID האחרון שכבר נשלח למשתמש
+        last_id = self.last_sent_alert_id.get(user_id, 0)
+
+        # שליפת רק התרעות חדשות
+        alerts = users_data_base.get_alerts_by_agent(agent_id, last_id)
+        print("alerts1:", alerts)
+
+        result = []
+
+        for alert in alerts:
+            row = [
+                str(alert[0]),  # id
+                str(alert[2]),  # time
+                str(alert[3]),  # type
+                str(alert[4]),  # file name
+                str(alert[5]),  # path
+                str(alert[6]),  # risk
+                str(alert[7]),  # reason
+                str(alert[8])  # status
+            ]
+
+            result.append(row)
+
+        # עדכון ה-ID האחרון שנשלח
+        if alerts:
+            last_alert_id = alerts[-1][0]
+
+            self.last_sent_alert_id[user_id] = last_alert_id
+
+        print("result:", result)
+
+        return result
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ import user_page
 import home_page
 import login_page
 import register_page
-import subprocess
 import uuid
 import os
 from getmac import get_mac_address
@@ -16,7 +15,6 @@ lock = Lock()
 
 class MainFrame(wx.Frame):
     def __init__(self):
-        #self.start_agent()
 
         super().__init__(None, title="Security project", size=(400, 300))
         self.Maximize()
@@ -30,6 +28,10 @@ class MainFrame(wx.Frame):
         self.user_id = None
         self.create_user_id()
         self.alerts_list = []
+
+        # ניצור משתנה כדי לדעת האם הסוכן כבר רץ במחשב.
+        # בשביל שאם לקוח יתנתק ולקוח חדש יתחבר מאותו מחשב, שלא יהיו לי כמה סוכנים רצים.
+        self.agent_started = False
 
         self.mac = get_mac_address()
 
@@ -56,8 +58,8 @@ class MainFrame(wx.Frame):
                     print("line 56")
 
                     # מתחילים להאזין להתרעות מהשרת ברקע
-                    Thread(target=self.start_listening_to_server, daemon=True).start()
-                    print("line 60")
+                    # Thread(target=self.start_listening_to_server, daemon=True).start()
+                    # print("line 60")
 
                     # הגדרת הפאנלים
                     self.home_page_obj = home_page.HomePage(self)
@@ -84,41 +86,13 @@ class MainFrame(wx.Frame):
                     self.show_panel("home")
                     self.Show()
 
-    def start_listening_to_server(self):
-        with lock:
-            print("line 89")
-            counter = 1
-            while True:
-                try:
-                    print("counter =", counter)
-                    counter += 1
-                    print("line 94")
-                    with lock:
-                        data = self.my_socket.recv(2048)
-                        print("data:", data)
-                        if not data:
-                            break
-
-                    #decrypted = encryption.decryption_data_in_client(self.server_public_key, data)
-                    message = data.decode("utf-8")
-
-                    list_data = message.split("|")
-
-                    if list_data[0] == "agent":
-                        self.alerts_list.append(list_data)
-                        print("file_from_server:", list_data)
-
-                except Exception as e:
-                    print(f"Listener error: {e}")
-                    break
-            print("line 110")
 
     def create_user_id(self):
         # ניצור user_id ונשלח אותו לשרת.
-        #במחשב שלי
-        #user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
-        #במחשב בבית ספר
-        user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
+        # במחשב שלי
+        user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
+        # במחשב בבית ספר
+        # user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
         self.user_id = None
         if os.path.exists(user_id_path):
             self.user_id = open(user_id_path, "r").read().strip()
@@ -128,12 +102,6 @@ class MainFrame(wx.Frame):
             with open(user_id_path, "w") as f:
                 f.write(self.user_id)
 
-    # def start_agent(self):
-    #     AGENT_PATH = r"C:\Users\TLV\Documents\agent\agent.exe"
-    #     subprocess.Popen(
-    #         AGENT_PATH,
-    #         creationflags=subprocess.CREATE_NO_WINDOW
-    #     )
 
     def show_panel(self, name):
         self.panel_home.Hide()
@@ -166,9 +134,8 @@ class MainFrame(wx.Frame):
         if self.my_socket:
             print("line 159")
             self.my_socket.send(encrypted_message)  # לא צריך להפוך לבייטים כי הוא כבר בייט
-            data = self.my_socket.recv(1024)
+            data = self.my_socket.recv(1024).decode("utf-8")
             print("line 162")
-            data = encryption.decryption_data_in_client(self.server_public_key, data)
             print("data-", data)
         return data
 

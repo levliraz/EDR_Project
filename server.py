@@ -79,18 +79,6 @@ class Server:
                 self.mac_agent = client_socket.recv(1024).decode('utf-8').strip()  # קוראים את ה-MAC ששלח הסוכן וממירים ל-string
                 client_socket.send("i got your mac".encode())  # מאשרים לסוכן שקיבלנו
 
-                # כאן כבר יש לנו agent_id + mac → שומרים מיד!
-                # with lock:  # נועלים כדי ששני ת'רדים לא יתנגשו בו זמנית
-                #     mac = self.mac_agent.strip()  # מנקים רווחים מיותרים מסביב ל-MAC
-                #     if mac not in self.mac_agent_user_dic:  # אם ה-MAC הזה עדיין לא קיים במילון
-                #         self.mac_agent_user_dic[mac] = {  # יוצרים רשומה חדשה
-                #             "agent_id": self.agent_id,  # שומרים את ה-agent_id שזה עתה קיבלנו
-                #             "users": []  # רשימת משתמשים ריקה בהתחלה
-                #         }
-                #     elif self.mac_agent_user_dic[mac]["agent_id"] != self.agent_id:
-                #         # אם כבר יש MAC כזה אבל עם agent_id אחר – זה באג/תקלה
-                #         print(f"WARNING: אותו MAC עם agent_id שונה! {mac}")
-
                 with lock:
                     mac = self.mac_agent.strip()
                     # אם ה-MAC לא קיים עדיין
@@ -244,28 +232,6 @@ class Server:
                 print(f"Added user {self.user_id} to MAC {mac}")
 
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
-
-    # def link_user_to_agent_session(self):
-    #     # קבלת ה-MAC של המשתמש וניקוי ערכים מיותרים
-    #     mac = self.mac_user.decode('utf-8').strip() if isinstance(self.mac_user, bytes) else self.mac_user.strip()
-    #
-    #     # שימוש ב-Lock כדי למנוע התנגשויות בין Threads
-    #     with lock:
-    #         #אם כבר קיים Agent למחשב הזה
-    #         if mac in self.mac_agent_user_dic:
-    #
-    #             # אם המשתמש עדיין לא רשום לרשימת המשתמשים של אותו MAC
-    #             if self.user_id not in self.mac_agent_user_dic[mac]["users"]:
-    #                 self.mac_agent_user_dic[mac]["users"].append(self.user_id)
-    #                 print(f"הוספתי user {self.user_id} למכונה {mac}")
-    #
-    #         else:
-    #             # אם אין Agent שמחובר מהמחשב הזה
-    #             print(f"אזהרה: GUI התחבר ממכונה {mac} אבל אין עדיין סוכן רשום על ה-MAC הזה!")
-    #
-    #     # הדפסת מצב המילון לצורך בדיקה
-    #     print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
-
 
     def get_alerts_for_user(self, user_id):
         print("line 248")

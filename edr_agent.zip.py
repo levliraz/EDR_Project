@@ -47,9 +47,9 @@ class Agent:
     def create_agent_id(self):
         # נתיב תיקיית ה-Agent
         #במחשב שלי
-        BASE_DIR = r"C:\Users\TLV\Documents\agent"
+        #BASE_DIR = r"C:\Users\TLV\Documents\agent"
         #במחשב הבית ספר
-        #BASE_DIR = r"C:\Users\Pc2\Documents\agent"
+        BASE_DIR = r"C:\Users\Pc2\Documents\agent"
         FILES_DIR = os.path.join(BASE_DIR, "suspicious_files")
         agent_id_dir = os.path.join(BASE_DIR, "agent_id.txt")
         # קריאה או יצירה של agent_id

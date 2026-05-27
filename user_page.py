@@ -28,7 +28,6 @@ class UserPage:
         self.timer_for_update = None
         self.timer_for_fetch = None
 
-
     def create_user_page(self):
         # טיימר לשליחת בקשה לשרת כל דקה
         self.timer_for_fetch = wx.Timer(self.panel)
@@ -118,7 +117,6 @@ class UserPage:
         except Exception as e:
             print("error fetching alerts:", e)
 
-
     def on_agent_click(self, event):
         self.lbl_name.Hide()
         self.btn_agent.Hide()
@@ -129,7 +127,6 @@ class UserPage:
         # יוצר טבלה פעם אחת (ריקה)
         self.show_alerts_table()
 
-
     # מזהה איזו שורה נלחצה, שולף את כתובת הקובץ ומציג אותו בסייר הקבצים(פתיחת חלון)
     def on_row_click(self, event):
         index = event.GetIndex()
@@ -138,8 +135,6 @@ class UserPage:
         # מציג את הכפתור
         self.delete_file_button.Show()
         self.panel.Layout()
-
-
 
     def delete_file(self, event):
         if not self.selected_file_path:
@@ -160,12 +155,26 @@ class UserPage:
                 os.remove(self.selected_file_path)
                 print("נמחק בהצלחה")
 
+                # מחיקה מהטבלה ומהזיכרון
+                for row in range(self.alerts_table.GetItemCount()):
+                    path = self.alerts_table.GetItem(row, 4).GetText()
+                    if path == self.selected_file_path:
+                        self.alerts_table.DeleteItem(row)
+                        if row < len(self.alerts_data):
+                            self.alerts_data.pop(row)
+
+                        break
+
+                self.alerts_table.Refresh()
+                self.panel.Layout()
+                self.panel.Refresh()
+
             else:
                 print("הקובץ לא נמצא")
 
         self.delete_file_button.Hide()
+        self.selected_file_path = None
         self.panel.Layout()
-
 
     def show_alerts_table(self):
         # אם כבר קיימת טבלה לא לבנות מחדש
@@ -196,7 +205,6 @@ class UserPage:
         self.vbox.Insert(3, self.panel_scrolled, 1, wx.EXPAND | wx.ALL, 10)
 
         self.panel.Layout()
-
 
     def check_deleted_files(self, event):
         if not self.alerts_table:
@@ -234,7 +242,6 @@ class UserPage:
                 self.alerts_data.pop(row)
 
         print("rows_to_delete", rows_to_delete)
-
 
     def update_table(self, list_data):
         if not self.alerts_table:

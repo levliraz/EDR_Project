@@ -164,3 +164,23 @@ def get_alerts_by_agent(agent_id, last_id):
     print("rows_in data_base:", rows)
 
     return rows
+
+#הפעולה מוחקת שורה ממסד הנתונים לפי מספר השורה(ID)
+def delete_row_from_data_base(alert_id):
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    alert_id = int(alert_id)
+
+    c.execute(
+        "DELETE FROM alerts WHERE id = ?",
+        (alert_id,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    print("Deleted alert:", alert_id)
+
+    return "The file deleted successfully"

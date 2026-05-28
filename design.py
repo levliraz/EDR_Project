@@ -23,7 +23,7 @@ class MainFrame(wx.Frame):
 
         # יצירת סוקט שמחובר לשרת
         self.my_socket = socket.socket()
-        self.my_socket.connect(("127.0.0.1", 1236))
+        self.my_socket.connect(("127.0.0.1", 1237))
 
         self.user_id = None
         self.create_user_id()
@@ -90,9 +90,9 @@ class MainFrame(wx.Frame):
     def create_user_id(self):
         # ניצור user_id ונשלח אותו לשרת.
         # במחשב שלי
-        #user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
+        user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
         # במחשב בבית ספר
-        user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
+        #user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
         self.user_id = None
         if os.path.exists(user_id_path):
             self.user_id = open(user_id_path, "r").read().strip()
@@ -125,17 +125,22 @@ class MainFrame(wx.Frame):
         self.Close()  # סגירת חלון ה־wx.Frame
 
     def send_and_receive_data(self, command, f_name, email, password):
-        print("line 152")
         data = "not work"
         print(password)
-        message = f"{command}|{f_name}|{email}|{password}|{self.user_id}"
-        print(message)
+        if not isinstance(f_name, list):
+            message = f"{command}|{f_name}|{email}|{password}|{self.user_id}"
+            print(message)
+        else:
+            id_alert = f_name[0]
+            agent_id = f_name[1]
+            file_name = f_name[4]
+            message = f"{command}|{id_alert}|{agent_id}|{file_name}"
+            print(message)
+
         encrypted_message = encryption.encryption_data_server_and_client(message, self.server_public_key)
         if self.my_socket:
-            print("line 159")
             self.my_socket.send(encrypted_message)  # לא צריך להפוך לבייטים כי הוא כבר בייט
-            data = self.my_socket.recv(1024).decode("utf-8")
-            print("line 162")
+            data = self.my_socket.recv(4096).decode("utf-8")
             print("data-", data)
         return data
 

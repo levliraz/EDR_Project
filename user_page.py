@@ -19,25 +19,19 @@ class UserPage:
         self.search_ctrl = None
         self.panel_scrolled = None
         self.selected_file_path = None
-        self.all_row_files = []
-        self.files_to_delete_in_server = []
-        self.all_files_map = {}
+        self.row_map = {}
         self.design = parent
         self.timer_for_delete = None
         self.delete_file_button = None
         self.timer_for_update = None
         self.timer_for_fetch = None
+        self.selected_row_data = None
 
     def create_user_page(self):
         # טיימר לשליחת בקשה לשרת כל דקה
         self.timer_for_fetch = wx.Timer(self.panel)
         self.panel.Bind(wx.EVT_TIMER, self.request_new_alerts, self.timer_for_fetch)
-        self.timer_for_fetch.Start(60_000)  # 60 שניות
-
-        #יצירת טיימר לבדיקה אוטומטית של קבצים שנמחקו
-        self.timer_for_delete = wx.Timer(self.panel)  # יוצרים את הטיימר
-        self.timer_for_delete.Bind(wx.EVT_TIMER, self.check_deleted_files)  # מחברים אירוע טיימר לפונקציה
-        self.timer_for_delete.Start(3000)  # כל 3 שניות
+        self.timer_for_fetch.Start(30_000)  # 30 שניות
 
         # פונט גדול
         font_big = wx.Font(18, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
@@ -57,6 +51,8 @@ class UserPage:
         self.btn_agent.SetBackgroundColour(wx.Colour(255, 255, 255))
         self.vbox.Add(self.btn_agent, 0, wx.CENTER | wx.TOP, 20)
 
+        self.btn_agent.Bind(wx.EVT_BUTTON, self.on_agent_click)
+
         # דוחף את הכפתור התחתון למטה
         self.vbox.AddStretchSpacer()
         # סייזר תחתון
@@ -69,15 +65,17 @@ class UserPage:
         btn_disconnection.SetFont(font_big)
         bottom_sizer.Add(btn_disconnection, 0, wx.RIGHT | wx.BOTTOM, 20)
 
-        #כפתור מחיקה של קובץ
+        # כפתור מחיקה של קובץ
         self.delete_file_button = wx.Button(self.panel, label="מחק")
-        self.delete_file_button.SetBackgroundColour(wx.Colour(255, 200, 200))  # אדום בהיר
-        self.delete_file_button.Hide()  # בהתחלה מוסתר
-
+        self.delete_file_button.SetBackgroundColour(wx.Colour(200, 0, 0))  # אדום חזק
+        self.delete_file_button.SetForegroundColour(wx.Colour(255, 255, 255))  # טקסט לבן
+        font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+        self.delete_file_button.SetFont(font)
+        self.delete_file_button.SetMinSize((120, 45))  # גודל כפתור
+        self.delete_file_button.Hide()
         self.delete_file_button.Bind(wx.EVT_BUTTON, self.delete_file)
 
-        # חיבור אירוע- לחיצה על התחברות
-        self.btn_agent.Bind(wx.EVT_BUTTON, self.on_agent_click)
+        self.vbox.Add(self.delete_file_button, 0, wx.CENTER | wx.TOP, 10)
 
         # חיבור אירוע
         btn_disconnection.Bind(wx.EVT_BUTTON, lambda e: self.design.disconnection())
@@ -85,17 +83,11 @@ class UserPage:
         self.vbox.Add(bottom_sizer, 0, wx.EXPAND)
         self.panel.SetSizer(self.vbox)
 
-        #נקרא לפונקציה שמפעילה ת'רד בשביל לקבל התרעות מהשרת
-        #self.start_alert_listener()
-
         return self.panel
 
     def request_new_alerts(self, event=None):
-        print("line 100")
         try:
             data = self.design.send_and_receive_data("get_alerts", "null", "null", "null")
-
-            print("line 104")
 
             if not data:
                 return
@@ -109,9 +101,15 @@ class UserPage:
 
             for alert in alerts_list:
                 print("alert:", alert)
+
                 if alert.strip():
                     row = alert.split("|")
                     print("row:", row)
+
+                    if len(row) < 9:
+                        print("Bad row (skipped):", row)
+                        continue
+
                     wx.CallAfter(self.update_table, row)
 
         except Exception as e:
@@ -127,18 +125,26 @@ class UserPage:
         # יוצר טבלה פעם אחת (ריקה)
         self.show_alerts_table()
 
-    # מזהה איזו שורה נלחצה, שולף את כתובת הקובץ ומציג אותו בסייר הקבצים(פתיחת חלון)
+    # מזהה איזו שורה נלחצה,שומר את השורה ברשימה
     def on_row_click(self, event):
         index = event.GetIndex()
-        self.selected_file_path = self.alerts_table.GetItem(index, 4).GetText()
+        self.selected_file_path = self.alerts_table.GetItem(index, 5).GetText()
 
-        # מציג את הכפתור
+        # לוקחים את ה-ID מהעמודה הראשונה בטבלה
+        alert_id = self.alerts_table.GetItem(index, 1).GetText()
+
+        # מביאים את כל המידע מהמילון
+        self.selected_row_data = self.row_map[alert_id]
+
         self.delete_file_button.Show()
         self.panel.Layout()
 
     def delete_file(self, event):
         if not self.selected_file_path:
             return
+
+        print("PATH FROM DB:", self.selected_file_path)
+        print("EXISTS?:", os.path.exists(self.selected_file_path))
 
         dlg = wx.MessageDialog(
             self.panel,
@@ -155,12 +161,21 @@ class UserPage:
                 os.remove(self.selected_file_path)
                 print("נמחק בהצלחה")
 
+                # נבצע שליחה של הקובץ לשרת
+                row_data = self.selected_row_data
+                if row_data:
+                    print("row_data:", row_data)
+                    self.design.send_and_receive_data("delete_alert", row_data, "null", "null")
+
                 # מחיקה מהטבלה ומהזיכרון
                 for row in range(self.alerts_table.GetItemCount()):
-                    path = self.alerts_table.GetItem(row, 4).GetText()
+                    path = self.alerts_table.GetItem(row, 5).GetText()
                     if path == self.selected_file_path:
                         self.alerts_table.DeleteItem(row)
+                        #מסדרים מחדש את המספרים
+                        self.refresh_ui_numbers()
                         if row < len(self.alerts_data):
+                            #מוחק מהזיכרון את אותה שורה שנמחקה מהטבלה
                             self.alerts_data.pop(row)
 
                         break
@@ -175,6 +190,7 @@ class UserPage:
         self.delete_file_button.Hide()
         self.selected_file_path = None
         self.panel.Layout()
+
 
     def show_alerts_table(self):
         # אם כבר קיימת טבלה לא לבנות מחדש
@@ -193,8 +209,8 @@ class UserPage:
 
         self.alerts_table.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_row_click)
 
-        columns = ["ID", "Timestamp", "Type", "File Name", "File Path", "Risk", "Reason", "Status"]
-        widths = [40, 170, 170, 280, 300, 40, 250, 120]
+        columns = ["", "ID", "Timestamp", "Type", "File Name", "File Path", "Risk", "Reason", "Status"]
+        widths = [40, 40, 170, 170, 280, 300, 40, 250, 120]
 
         for i, col in enumerate(columns):
             self.alerts_table.InsertColumn(i, col)
@@ -206,42 +222,6 @@ class UserPage:
 
         self.panel.Layout()
 
-    def check_deleted_files(self, event):
-        if not self.alerts_table:
-            return  # אם עדיין אין טבלה – דלג
-
-        rows_to_delete = []
-
-        for row in range(self.alerts_table.GetItemCount()):
-
-            file_name = self.alerts_table.GetItem(row, 3).GetText()
-            file_path = self.alerts_table.GetItem(row, 4).GetText()
-
-            key = (file_name, file_path)
-
-            if not os.path.exists(file_path):
-                print("missing file:", key)
-
-                row_data = self.all_files_map.get(key)
-
-                if row_data:
-                    msg = "|".join(row_data)
-                    #self.design.my_socket.send(f"delete_alert|{msg}".encode())
-
-                    # מוחקים מהמילון
-                    del self.all_files_map[key]
-
-                # רק אחר כך מוסיפים למחיקה מהטבלה
-                rows_to_delete.append(row)
-
-         # מוחקים רק כאן — מהסוף להתחלה
-        for row in reversed(rows_to_delete):
-            self.alerts_table.DeleteItem(row)
-
-            if row < len(self.alerts_data):
-                self.alerts_data.pop(row)
-
-        print("rows_to_delete", rows_to_delete)
 
     def update_table(self, list_data):
         if not self.alerts_table:
@@ -251,28 +231,31 @@ class UserPage:
         self.alerts_data.append(list_data)
 
         # בדיקת אורך בטיחות
-        if len(list_data) < 8:
+        if len(list_data) < 9:
             print("Bad row:", list_data)
             return
 
         # אינדקס שורה
         index = self.alerts_table.GetItemCount()
 
-        # ID
-        self.alerts_table.InsertItem(index, str(index + 1))
+        alert_id = list_data[0]
+        # שמירת כל השורה המקורית (כולל agent_id)
+        self.row_map[alert_id] = list_data
 
-        # עמודות
-        self.alerts_table.SetItem(index, 1, list_data[1])  # time
-        self.alerts_table.SetItem(index, 2, list_data[2])  # type
-        self.alerts_table.SetItem(index, 3, list_data[3])  # file name
-        self.alerts_table.SetItem(index, 4, list_data[4])  # path
-        self.alerts_table.SetItem(index, 5, list_data[5])  # risk
-        self.alerts_table.SetItem(index, 6, list_data[6])  # reason
-        self.alerts_table.SetItem(index, 7, list_data[7])  # status
+        self.alerts_table.InsertItem(index, str(index + 1))  # UI number
+        self.alerts_table.SetItem(index, 1, list_data[0])  # DB ID
+
+        self.alerts_table.SetItem(index, 2, list_data[2])
+        self.alerts_table.SetItem(index, 3, list_data[3])
+        self.alerts_table.SetItem(index, 4, list_data[4])
+        self.alerts_table.SetItem(index, 5, list_data[5])
+        self.alerts_table.SetItem(index, 6, list_data[6])
+        self.alerts_table.SetItem(index, 7, list_data[7])
+        self.alerts_table.SetItem(index, 8, list_data[8])
 
         # צבע לפי Risk
         try:
-            risk = int(list_data[5])  # לא filtered!
+            risk = int(list_data[6])  # לא filtered!
 
             if risk >= 50:
                 color = wx.Colour(255, 0, 0)
@@ -290,3 +273,8 @@ class UserPage:
         self.panel_scrolled.Layout()
         self.panel_scrolled.FitInside()
         self.panel_scrolled.Refresh()
+
+    def refresh_ui_numbers(self):
+        for row in range(self.alerts_table.GetItemCount()):
+            self.alerts_table.SetItem(row, 0, str(row + 1))
+

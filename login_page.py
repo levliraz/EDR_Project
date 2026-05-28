@@ -2,6 +2,26 @@ import wx
 import field_integrity_checks
 import subprocess
 import sys
+import psutil #הספרייה הזאת מאפשרת לראות תהליכים
+
+#הפונקציה מחזירה true אם הסוכן כבר רץ במחשב, אחרת מחזירה false
+def is_agent_running():
+    #עובר על כל התהליכים שרצים כרגע במחשב ומחזיר את הנתונים שביקשתי לקבל-מזהה תהליך, שם התהליך, הפקודה שהריצה את התהליך
+    for process in psutil.process_iter(['pid', 'name', 'cmdline']):
+
+        try:
+            cmdline = process.info['cmdline']
+
+            # בודק אם התהליך הוא הסוכן שלי
+            if cmdline and "edr_agent.py" in " ".join(cmdline):
+                return True
+
+        except (psutil.NoSuchProcess,
+                psutil.AccessDenied,
+                psutil.ZombieProcess):
+            pass
+
+    return False
 
 
 class LoginPage:
@@ -102,20 +122,22 @@ class LoginPage:
         data = self.design.send_and_receive_data("login", f_name, email, password)
         if data.startswith("Welcome"):
 
-        #subprocess זו ספרייה של Python שמאפשרת לתוכנית אחת להפעיל תוכנית אחרת.
-        #Popen = Process Open - יוצר תהליך חדש
-        #sys.executable - זה הנתיב המדויק של פייתון שרץ עכשיו
-        #creationflags=subprocess.CREATE_NEW_CONSOLE - ה־Agent רץ באותו console של ה־GUI. בלי זה
-        #לכן, Windows פותח חלון CMD חדש לגמרי
+            #subprocess זו ספרייה של Python שמאפשרת לתוכנית אחת להפעיל תוכנית אחרת.
+            #Popen = Process Open - יוצר תהליך חדש
+            #sys.executable - זה הנתיב המדויק של פייתון שרץ עכשיו
+            #creationflags=subprocess.CREATE_NEW_CONSOLE - ה־Agent רץ באותו console של ה־GUI. בלי זה
+            #לכן, Windows פותח חלון CMD חדש לגמרי
 
-            # מפעילים Agent רק פעם אחת
-            if not self.design.agent_started:
-                subprocess.Popen(
-                    [sys.executable, "edr_agent.zip.py"],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
-                )
+            if not is_agent_running():
 
-                self.design.agent_started = True
+                # מפעילים Agent רק פעם אחת
+                if not self.design.agent_started:
+                    subprocess.Popen(
+                        [sys.executable, "edr_agent.py"],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
+
+                    self.design.agent_started = True
 
             self.design.user_page_obj.user_status_message.SetLabel(data)
             self.design.show_panel("user")

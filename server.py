@@ -9,7 +9,7 @@ lock = Lock()
 class Server:
     def __init__(self):
         self.listening_socket = socket.socket()
-        self.listening_socket.bind(("0.0.0.0", 1236))
+        self.listening_socket.bind(("0.0.0.0", 1237))
         self.listening_socket.listen(5)
         self.msg = ""
         self.connect_users = []
@@ -194,6 +194,17 @@ class Server:
                     rows_as_strings = ["|".join(row) for row in alerts]
                     self.msg = "||".join(rows_as_strings)
 
+                elif command == "delete_alert":
+                    id_alert = list_data[1]
+                    agent_id = list_data[2]
+                    file_name = list_data[3]
+
+                    #משתמשים בdiscard כי אם הקובץ כבר לא נמצא ב־set,לא תהיה שגיאה והשרת לא יתקע
+                    self.already_alerted_files.discard((agent_id, file_name))
+
+                    #קוראים לפעולה שמוחקת שורה ממסד הנתונים
+                    self.msg = users_data_base.delete_row_from_data_base(id_alert)
+
                 else:
                     self.msg = f"Unknown command: {command}"
 
@@ -205,10 +216,20 @@ class Server:
         except Exception as e:
             print(f"Error: {e}")
         finally:
-            if list_data is not None:
-                self.user_id = list_data[4]
-                if self.user_id in self.connect_users:
-                    self.connect_users.remove(self.user_id)
+            try:
+                if list_data and len(list_data) > 4:
+                    self.user_id = list_data[4]
+
+                    if self.user_id in self.connect_users:
+                        self.connect_users.remove(self.user_id)
+
+                        #last_sent_alert_id איפוס
+                        if self.user_id in self.last_sent_alert_id:
+                            del self.last_sent_alert_id[self.user_id]
+
+            except Exception as e:
+                print("finally error:", e)
+
             print(f"Connection with {client_address} closed")
 
     def link_user_to_agent_session(self):
@@ -234,7 +255,6 @@ class Server:
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
 
     def get_alerts_for_user(self, user_id):
-        print("line 248")
         agent_id = None
 
         for mac, data in self.mac_agent_user_dic.items():
@@ -257,6 +277,7 @@ class Server:
         for alert in alerts:
             row = [
                 str(alert[0]),  # id
+                str(alert[1]),  #agent_id
                 str(alert[2]),  # time
                 str(alert[3]),  # type
                 str(alert[4]),  # file name

@@ -1,6 +1,6 @@
 import socket
 from threading import Thread, Lock
-import users_data_base
+import data_base
 from cryptography.hazmat.primitives.asymmetric import rsa
 import encryption
 
@@ -12,7 +12,7 @@ class Server:
         self.listening_socket.bind(("0.0.0.0", 1237))
         self.listening_socket.listen(5)
         self.msg = ""
-        self.connect_users = []
+        self.logged_in_users = {}  # email -> socket
 
         #שמירת last_id לכל משתמש
         # לכל משתמש נשמר ה־ID האחרון שנשלח אליו
@@ -22,7 +22,7 @@ class Server:
         self.user_dic = {}
         self.mac_agent_user_dic = {}
 
-        users_data_base.create_data_base()
+        data_base.create_data_base()
         # --- בצד השרת: יצירת זוג מפתחות ---
         self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.public_key = self.private_key.public_key()
@@ -110,7 +110,7 @@ class Server:
                 client_socket.send("i got your mac".encode())
 
                 # הוספתי למילון מפתח שהוא הuser_id והערך שלו הוא הסוקט של הלקוח המחובר כרגע
-                self.user_dic[self.user_id] = client_socket
+                #self.user_dic[self.user_id] = client_socket
                 print("users", self.user_dic)
 
                 self.link_user_to_agent_session()
@@ -149,15 +149,15 @@ class Server:
 
                 command = list_data[0]
 
-                if not client_socket:
-                    self.connect_users.remove(list_data)
+                #if not client_socket:
+                    #self.connect_users.remove(list_data)
 
                 if command == "agent":
                     #f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
                     file_name = list_data[4]
 
                     if (self.agent_id, file_name) not in self.already_alerted_files:
-                        self.msg = users_data_base.handle_alerts(list_data)
+                        self.msg = data_base.handle_alerts(list_data)
                         self.already_alerted_files.add((self.agent_id, file_name))
 
 
@@ -166,18 +166,20 @@ class Server:
 
 
                 elif command == "login":
-                    self.msg = users_data_base.handle_login(list_data, self.connect_users)
+                    email = list_data[2]
+                    with lock:
 
-                    if client_socket and self.msg.startswith("Welcome"):
-                        # אחרי התחברות מוצלחת
-                        self.user_id = list_data[4]  # ה-UUID של המשתמש
-                        if self.user_id not in self.connect_users:
-                            self.connect_users.append(self.user_id)
+                        if email in self.logged_in_users:
+                            self.msg = "You are already login on the site"
 
-                    print("connect_users", self.connect_users)
+                        else:
+                            self.msg = data_base.handle_login(list_data)
+
+                            if self.msg.startswith("Welcome"):
+                                self.logged_in_users[email] = client_socket
 
                 elif command == "register":
-                    self.msg = users_data_base.handle_register(list_data)
+                    self.msg = data_base.handle_register(list_data)
 
                 elif command == "get_alerts":
                     print("line 195")
@@ -203,7 +205,7 @@ class Server:
                     self.already_alerted_files.discard((agent_id, file_name))
 
                     #קוראים לפעולה שמוחקת שורה ממסד הנתונים
-                    self.msg = users_data_base.delete_row_from_data_base(id_alert)
+                    self.msg = data_base.delete_row_from_data_base(id_alert)
 
                 else:
                     self.msg = f"Unknown command: {command}"
@@ -220,8 +222,10 @@ class Server:
                 if list_data and len(list_data) > 4:
                     self.user_id = list_data[4]
 
-                    if self.user_id in self.connect_users:
-                        self.connect_users.remove(self.user_id)
+                    if list_data and len(list_data) > 2:
+                        email = list_data[2]
+                        #משתמשים בpop ולא בdelete כדי שאם הערך לא קיים במילון, זה לא יקרוס
+                        self.logged_in_users.pop(email, None)
 
                         #last_sent_alert_id איפוס
                         if self.user_id in self.last_sent_alert_id:
@@ -269,7 +273,7 @@ class Server:
         last_id = self.last_sent_alert_id.get(user_id, 0)
 
         # שליפת רק התרעות חדשות
-        alerts = users_data_base.get_alerts_by_agent(agent_id, last_id)
+        alerts = data_base.get_alerts_by_agent(agent_id, last_id)
         print("alerts1:", alerts)
 
         result = []

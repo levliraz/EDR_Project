@@ -49,7 +49,7 @@ def create_data_base():
 #risk_score-ציון סיכון (0–100), status-מצב ההתרעה: חדש / טופל / מתעלם
 
 
-def handle_login(list_data, connect_users):
+def handle_login(list_data):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     email = list_data[2]
@@ -70,10 +70,7 @@ def handle_login(list_data, connect_users):
 
     conn.close()
     if bcrypt.checkpw(password_from_client.encode("utf-8"), stored_hash_bytes):
-        if user_id not in connect_users:
-            return f"Welcome user:{list_data[1]}"
-        else:
-            return "You are already login on the site"
+        return f"Welcome user:{list_data[1]}"
     else:
         return "Wrong password"
 

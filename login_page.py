@@ -18,6 +18,7 @@ def is_agent_running():
 
         except (psutil.NoSuchProcess,
                 psutil.AccessDenied,
+                #זה תהליך שהסתיים אבל מערכת ההפעלה עדיין לא ניקתה אותו לגמרי מהטבלה הפנימית של התהליכים.
                 psutil.ZombieProcess):
             pass
 

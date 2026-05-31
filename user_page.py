@@ -28,7 +28,7 @@ class UserPage:
         self.selected_row_data = None
 
     def create_user_page(self):
-        # טיימר לשליחת בקשה לשרת כל דקה
+        # טיימר לשליחת בקשה לשרת כל חצי דקה
         self.timer_for_fetch = wx.Timer(self.panel)
         self.panel.Bind(wx.EVT_TIMER, self.request_new_alerts, self.timer_for_fetch)
         self.timer_for_fetch.Start(30_000)  # 30 שניות

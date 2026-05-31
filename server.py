@@ -169,7 +169,6 @@ class Server:
                     #  מונע מצב ששני login של אותו user קורים במקביל
                     # חשוב כדי למנוע כפילות התחברות
                     with lock:
-
                         if email in self.logged_in_users:
                             self.msg = "You are already login on the site"
 
@@ -230,7 +229,8 @@ class Server:
 
                         # הסרת משתמש מחובר בצורה בטוחה
                         # משתמשים בpop ולא בdelete כדי שאם הערך לא קיים במילון, זה לא יקרוס
-                        self.logged_in_users.pop(email, None)
+                        del self.logged_in_users[email]
+                        print(self.logged_in_users)
 
                         # ניקוי התראות אחרונות של המשתמש
                         if self.user_id in self.last_sent_alert_id:

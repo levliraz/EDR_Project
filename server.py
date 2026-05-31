@@ -12,7 +12,7 @@ class Server:
         self.listening_socket.bind(("0.0.0.0", 1237))
         self.listening_socket.listen(5)
         self.msg = ""
-        self.logged_in_users = {}  # email -> socket
+        self.logged_in_users = {}  # email : socket
 
         #שמירת last_id לכל משתמש
         # לכל משתמש נשמר ה־ID האחרון שנשלח אליו
@@ -23,7 +23,8 @@ class Server:
         self.mac_agent_user_dic = {}
 
         data_base.create_data_base()
-        # --- בצד השרת: יצירת זוג מפתחות ---
+
+        #בצד השרת: יצירת זוג מפתחות
         self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.public_key = self.private_key.public_key()
         self.decrypted_fernet_agent_key = None
@@ -49,9 +50,6 @@ class Server:
             client.start()
 
     def handle_client(self, client_socket, client_address):
-        # משתנה זה מורה על כמות השורות של הקבצים החשודים של אותו לקוח במסד הנתונים.
-        flag = 0
-
         # נשלח את המפתח הציבורי של השרת ללקוח לאחר "שהכנו" את המפתח הציבורי של השרת
         # שליחת המפתח הציבורי בלבד
         pem_public = encryption.server_asymmetric_encryption(self.public_key)
@@ -76,11 +74,15 @@ class Server:
 
                 client_socket.send("Hi agent_id".encode())
 
+                #strip() היא פונקציה שמסירה רווחים ותווי ירידת שורה (\n, \r, \t) מתחילת וסוף המחרוזת.
                 self.mac_agent = client_socket.recv(1024).decode('utf-8').strip()  # קוראים את ה-MAC ששלח הסוכן וממירים ל-string
                 client_socket.send("i got your mac".encode())  # מאשרים לסוכן שקיבלנו
 
+
+                #מונע מצב ששני threads יעדכנו את אותו MAC בו זמנית
+                # חשוב כי כמה Agents יכולים להתחבר במקביל
                 with lock:
-                    mac = self.mac_agent.strip()
+                    mac = self.mac_agent
                     # אם ה-MAC לא קיים עדיין
                     if mac not in self.mac_agent_user_dic:
 
@@ -97,6 +99,7 @@ class Server:
 
 
                 # הוספתי למילון מפתח שהוא הuser_id והערך שלו הוא הסוקט של הלקוח המחובר כרגע
+                # שמירת socket לפי agent_id
                 self.agent_dic[self.agent_id] = client_socket
                 print("agents", self.agent_dic)
 
@@ -109,8 +112,6 @@ class Server:
                 self.mac_user = client_socket.recv(1024).decode('utf-8').strip()
                 client_socket.send("i got your mac".encode())
 
-                # הוספתי למילון מפתח שהוא הuser_id והערך שלו הוא הסוקט של הלקוח המחובר כרגע
-                #self.user_dic[self.user_id] = client_socket
                 print("users", self.user_dic)
 
                 self.link_user_to_agent_session()
@@ -140,6 +141,7 @@ class Server:
                     decrypted_bytes = encryption.decryption_data_in_server(self.private_key, data)
 
                     try:
+                        #המרה מטיפוס bytes לטיפוס utf-8 - str
                         list_data = decrypted_bytes.decode("utf-8").split('|')
                     except UnicodeDecodeError:
                         print("Cannot decode decrypted_bytes:", decrypted_bytes)
@@ -148,9 +150,6 @@ class Server:
                 print("list_data", list_data)
 
                 command = list_data[0]
-
-                #if not client_socket:
-                    #self.connect_users.remove(list_data)
 
                 if command == "agent":
                     #f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
@@ -167,6 +166,8 @@ class Server:
 
                 elif command == "login":
                     email = list_data[2]
+                    #  מונע מצב ששני login של אותו user קורים במקביל
+                    # חשוב כדי למנוע כפילות התחברות
                     with lock:
 
                         if email in self.logged_in_users:
@@ -182,7 +183,6 @@ class Server:
                     self.msg = data_base.handle_register(list_data)
 
                 elif command == "get_alerts":
-                    print("line 195")
                     user_id = list_data[4]
                     # שליפה ממסד הנתונים
                     alerts = self.get_alerts_for_user(user_id)
@@ -194,6 +194,7 @@ class Server:
                         continue
 
                     rows_as_strings = ["|".join(row) for row in alerts]
+                    print("rows_as_strings:",rows_as_strings)
                     self.msg = "||".join(rows_as_strings)
 
                 elif command == "delete_alert":
@@ -202,6 +203,7 @@ class Server:
                     file_name = list_data[3]
 
                     #משתמשים בdiscard כי אם הקובץ כבר לא נמצא ב־set,לא תהיה שגיאה והשרת לא יתקע
+                    # שימוש ב-discard כדי למנוע קריסה אם הערך לא קיים
                     self.already_alerted_files.discard((agent_id, file_name))
 
                     #קוראים לפעולה שמוחקת שורה ממסד הנתונים
@@ -219,15 +221,18 @@ class Server:
             print(f"Error: {e}")
         finally:
             try:
+                # ניקוי חיבור כשהלקוח מתנתק
                 if list_data and len(list_data) > 4:
                     self.user_id = list_data[4]
 
                     if list_data and len(list_data) > 2:
                         email = list_data[2]
-                        #משתמשים בpop ולא בdelete כדי שאם הערך לא קיים במילון, זה לא יקרוס
+
+                        # הסרת משתמש מחובר בצורה בטוחה
+                        # משתמשים בpop ולא בdelete כדי שאם הערך לא קיים במילון, זה לא יקרוס
                         self.logged_in_users.pop(email, None)
 
-                        #last_sent_alert_id איפוס
+                        # ניקוי התראות אחרונות של המשתמש
                         if self.user_id in self.last_sent_alert_id:
                             del self.last_sent_alert_id[self.user_id]
 
@@ -238,8 +243,9 @@ class Server:
 
     def link_user_to_agent_session(self):
         # ניקוי רווחים מה-MAC
-        mac = self.mac_user.strip()
+        mac = self.mac_user
 
+        # מונע מצב שבו כמה משתמשים נרשמים לאותו MAC במקביל
         with lock:
             # אם ה-MAC עדיין לא קיים במילון
             if mac not in self.mac_agent_user_dic:

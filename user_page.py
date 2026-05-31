@@ -102,6 +102,7 @@ class UserPage:
             for alert in alerts_list:
                 print("alert:", alert)
 
+                # strip() היא פונקציה שמסירה רווחים ותווי ירידת שורה (\n, \r, \t) מתחילת וסוף המחרוזת.
                 if alert.strip():
                     row = alert.split("|")
                     print("row:", row)
@@ -110,6 +111,8 @@ class UserPage:
                         print("Bad row (skipped):", row)
                         continue
 
+                    # עדכון הטבלה דרך ה-Thread הראשי של wxPython
+                    # מונע קריסות בעת עדכון רכיבי GUI
                     wx.CallAfter(self.update_table, row)
 
         except Exception as e:

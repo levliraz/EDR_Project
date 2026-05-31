@@ -44,6 +44,7 @@ class Agent:
         # קריאה לפונקציה הראשית
         self.main()
 
+
     def create_agent_id(self):
         # נתיב תיקיית ה-Agent
         #במחשב שלי
@@ -108,7 +109,7 @@ class Agent:
                                 print("in while true", count)
 
                                 self.all_suspicious = []  # נקה
-                                self.suspicious_files = []  # נקה – חשוב!
+                                self.suspicious_files = []  # נקה
                                 self.suspicious_files_to_send = []  # נקה
 
                                 # סריקה מלאה של כל התיקיות

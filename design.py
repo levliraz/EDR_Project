@@ -27,6 +27,8 @@ class MainFrame(wx.Frame):
 
         self.user_id = None
         self.create_user_id()
+
+        # רשימת התראות שהתקבלו מהשרת
         self.alerts_list = []
 
         # ניצור משתנה כדי לדעת האם הסוכן כבר רץ במחשב.
@@ -46,21 +48,13 @@ class MainFrame(wx.Frame):
 
         self.my_socket.send("GUI".encode())
         if self.my_socket.recv(1024).decode() == "welcome client!":
-            print("line 47")
             user_id_to_send = encryption.encryption_data_server_and_client(self.user_id, self.server_public_key)
             self.my_socket.send(user_id_to_send)
 
             if self.my_socket.recv(1024).decode() == "Hi user_id":
-                print("line 52")
                 self.my_socket.send(self.mac.encode())
 
                 if self.my_socket.recv(1024).decode() == "i got your mac":
-                    print("line 56")
-
-                    # מתחילים להאזין להתרעות מהשרת ברקע
-                    # Thread(target=self.start_listening_to_server, daemon=True).start()
-                    # print("line 60")
-
                     # הגדרת הפאנלים
                     self.home_page_obj = home_page.HomePage(self)
                     self.panel_home = self.home_page_obj.create_home_page()

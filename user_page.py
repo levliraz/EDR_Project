@@ -26,6 +26,8 @@ class UserPage:
         self.timer_for_update = None
         self.timer_for_fetch = None
         self.selected_row_data = None
+        self.current_search = ""
+        self.current_color_filter = "הכל"
 
     def create_user_page(self):
         # טיימר לשליחת בקשה לשרת כל חצי דקה
@@ -52,6 +54,24 @@ class UserPage:
         self.vbox.Add(self.btn_agent, 0, wx.CENTER | wx.TOP, 20)
 
         self.btn_agent.Bind(wx.EVT_BUTTON, self.on_agent_click)
+
+        # חיפוש לפי שם קובץ
+        self.search_ctrl = wx.SearchCtrl(self.panel)
+        self.search_ctrl.Hide()
+        self.search_ctrl.Bind(wx.EVT_TEXT, self.on_search)
+
+        self.vbox.Add(self.search_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 10)
+
+        # פילטר צבע
+        self.color_choice = wx.Choice(
+            self.panel,
+            choices=["הכל", "אדום", "צהוב", "ירוק"]
+        )
+        self.color_choice.SetSelection(0)
+        self.color_choice.Hide()
+        self.color_choice.Bind(wx.EVT_CHOICE, self.on_color_filter)
+
+        self.vbox.Add(self.color_choice, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 10)
 
         # דוחף את הכפתור התחתון למטה
         self.vbox.AddStretchSpacer()
@@ -128,6 +148,10 @@ class UserPage:
         # יוצר טבלה פעם אחת (ריקה)
         self.show_alerts_table()
 
+        self.search_ctrl.Show()
+        self.color_choice.Show()
+        self.panel.Layout()
+
     # מזהה איזו שורה נלחצה,שומר את השורה ברשימה
     def on_row_click(self, event):
         index = event.GetIndex()
@@ -166,26 +190,42 @@ class UserPage:
 
                 # נבצע שליחה של הקובץ לשרת
                 row_data = self.selected_row_data
+
+                alert_id = row_data[0]
+
                 if row_data:
                     print("row_data:", row_data)
                     self.design.send_and_receive_data("delete_alert", row_data, "null", "null")
 
                 # מחיקה מהטבלה ומהזיכרון
-                for row in range(self.alerts_table.GetItemCount()):
-                    path = self.alerts_table.GetItem(row, 5).GetText()
-                    if path == self.selected_file_path:
-                        self.alerts_table.DeleteItem(row)
-                        #מסדרים מחדש את המספרים
-                        self.refresh_ui_numbers()
-                        if row < len(self.alerts_data):
-                            #מוחק מהזיכרון את אותה שורה שנמחקה מהטבלה
-                            self.alerts_data.pop(row)
-
+                for i, alert in enumerate(self.alerts_data):
+                    if alert[0] == alert_id:
+                        self.alerts_data.pop(i)
                         break
 
-                self.alerts_table.Refresh()
-                self.panel.Layout()
-                self.panel.Refresh()
+                # מחיקה מהמילון
+                if alert_id in self.row_map:
+                    del self.row_map[alert_id]
+
+                # רענון הטבלה
+                self.refresh_table()
+
+                # # מחיקה מהטבלה ומהזיכרון
+                # for row in range(self.alerts_table.GetItemCount()):
+                #     path = self.alerts_table.GetItem(row, 5).GetText()
+                #     if path == self.selected_file_path:
+                #         self.alerts_table.DeleteItem(row)
+                #         #מסדרים מחדש את המספרים
+                #         self.refresh_ui_numbers()
+                #         if row < len(self.alerts_data):
+                #             #מוחק מהזיכרון את אותה שורה שנמחקה מהטבלה
+                #             self.alerts_data.pop(row)
+                #
+                #         break
+                #
+                # self.alerts_table.Refresh()
+                # self.panel.Layout()
+                # self.panel.Refresh()
 
             else:
                 print("הקובץ לא נמצא")
@@ -213,7 +253,7 @@ class UserPage:
         self.alerts_table.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_row_click)
 
         columns = ["", "ID", "Timestamp", "Type", "File Name", "File Path", "Risk", "Reason", "Status"]
-        widths = [40, 40, 170, 170, 280, 300, 40, 250, 120]
+        widths = [40, 40, 170, 170, 230, 300, 40, 250, 120]
 
         for i, col in enumerate(columns):
             self.alerts_table.InsertColumn(i, col)
@@ -225,40 +265,74 @@ class UserPage:
 
         self.panel.Layout()
 
-
     def update_table(self, list_data):
         if not self.alerts_table:
             return
 
-        # שמירת הנתונים בזיכרון
-        self.alerts_data.append(list_data)
-
-        # בדיקת אורך בטיחות
         if len(list_data) < 9:
             print("Bad row:", list_data)
             return
 
-        # אינדקס שורה
-        index = self.alerts_table.GetItemCount()
+        self.alerts_data.append(list_data)
 
         alert_id = list_data[0]
-        # שמירת כל השורה המקורית (כולל agent_id)
         self.row_map[alert_id] = list_data
 
-        self.alerts_table.InsertItem(index, str(index + 1))  # UI number
-        self.alerts_table.SetItem(index, 1, list_data[0])  # DB ID
+        self.refresh_table()
 
-        self.alerts_table.SetItem(index, 2, list_data[2])
-        self.alerts_table.SetItem(index, 3, list_data[3])
-        self.alerts_table.SetItem(index, 4, list_data[4])
-        self.alerts_table.SetItem(index, 5, list_data[5])
-        self.alerts_table.SetItem(index, 6, list_data[6])
-        self.alerts_table.SetItem(index, 7, list_data[7])
-        self.alerts_table.SetItem(index, 8, list_data[8])
+        self.panel_scrolled.Layout()
+        self.panel_scrolled.FitInside()
+        self.panel_scrolled.Refresh()
 
-        # צבע לפי Risk
-        try:
-            risk = int(list_data[6])  # לא filtered!
+    def on_search(self, event):
+        self.current_search = self.search_ctrl.GetValue().lower()
+        self.refresh_table()
+
+    def on_color_filter(self, event):
+        self.current_color_filter = self.color_choice.GetStringSelection()
+        self.refresh_table()
+
+    def refresh_table(self):
+
+        self.alerts_table.DeleteAllItems()
+
+        row_number = 1
+
+        for row_data in self.alerts_data:
+
+            file_name = row_data[4].lower()
+
+            # סינון לפי שם
+            if self.current_search:
+                if self.current_search not in file_name:
+                    continue
+
+            # סינון לפי צבע
+            risk = int(row_data[6])
+
+            if self.current_color_filter == "אדום":
+                if risk < 50:
+                    continue
+
+            elif self.current_color_filter == "צהוב":
+                if risk < 30 or risk >= 50:
+                    continue
+
+            elif self.current_color_filter == "ירוק":
+                if risk >= 30:
+                    continue
+
+            index = self.alerts_table.GetItemCount()
+
+            self.alerts_table.InsertItem(index, str(row_number))
+            self.alerts_table.SetItem(index, 1, row_data[0])
+            self.alerts_table.SetItem(index, 2, row_data[2])
+            self.alerts_table.SetItem(index, 3, row_data[3])
+            self.alerts_table.SetItem(index, 4, row_data[4])
+            self.alerts_table.SetItem(index, 5, row_data[5])
+            self.alerts_table.SetItem(index, 6, row_data[6])
+            self.alerts_table.SetItem(index, 7, row_data[7])
+            self.alerts_table.SetItem(index, 8, row_data[8])
 
             if risk >= 50:
                 color = wx.Colour(255, 0, 0)
@@ -269,15 +343,6 @@ class UserPage:
 
             self.alerts_table.SetItemBackgroundColour(index, color)
 
-        except Exception as e:
-            print("Risk error:", e)
+            row_number += 1
 
         self.alerts_table.Refresh()
-        self.panel_scrolled.Layout()
-        self.panel_scrolled.FitInside()
-        self.panel_scrolled.Refresh()
-
-    def refresh_ui_numbers(self):
-        for row in range(self.alerts_table.GetItemCount()):
-            self.alerts_table.SetItem(row, 0, str(row + 1))
-

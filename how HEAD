@@ -1,0 +1,10 @@
+[33m9d5daec[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mbackup-my-change[m[33m)[m after matconet
+[33m6b69def[m I fixed all the last details in my project. And I took notes
+[33md4b98ed[m I fixed the problem when I had two users logging into the site at the same time from two different computers, using a dictionary of the user's email and the user's socket.
+[33m940cc25[m Today I improved the system’s stability, fixed synchronization issues between the server and the client, and enhanced the alert management logic to be more accurate, reliable, and user-friendly.
+[33m9694e54[m fixed suspicious file deletion and table synchronization
+[33m337b00b[m Fixed agent-user linking and added real-time alert coloring
+[33m355d342[m I fixed the data flow between the server and the client - the server sends new alerts to the client directly as soon as the agent detects a suspicious file, i nstead of the client requesting it itself. I added a thread on the client that constantly listens for alerts and stores them in a list, and a timer on the user page that updates the table every 3 seconds. I fixed bugs in encryption and wx timers.
+[33m9c13de2[m updated project, I deleted design1,edr1.py
+[33m6d76071[m Fix server-client message handling and thread-safe msg assignment; improve Agent/GUI command flow
+[33mf8be959[m I added a list that containes the data from the table, but only the data of files i want to delete. In order to send them to the server.

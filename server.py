@@ -49,14 +49,11 @@ class Server:
             client.start()
 
     def handle_client(self, client_socket, client_address):
-<<<<<<< HEAD
-=======
         list_data = None
         user_id = None
         email = None
         decrypted_fernet_agent_key = None
 
->>>>>>> eb4e734 (Implement alerts table filtering by filename and risk level. Refactor alerts table refresh logic and add search/color filters)
         # נשלח את המפתח הציבורי של השרת ללקוח לאחר "שהכנו" את המפתח הציבורי של השרת
         # שליחת המפתח הציבורי בלבד
         pem_public = encryption.server_asymmetric_encryption(self.public_key)
@@ -80,23 +77,18 @@ class Server:
 
                 client_socket.send("Hi agent_id".encode())
 
-<<<<<<< HEAD
                 #strip() היא פונקציה שמסירה רווחים ותווי ירידת שורה (\n, \r, \t) מתחילת וסוף המחרוזת.
-                self.mac_agent = client_socket.recv(1024).decode('utf-8').strip()  # קוראים את ה-MAC ששלח הסוכן וממירים ל-string
-=======
                 mac_agent = client_socket.recv(1024).decode('utf-8').strip()  # קוראים את ה-MAC ששלח הסוכן וממירים ל-string
->>>>>>> eb4e734 (Implement alerts table filtering by filename and risk level. Refactor alerts table refresh logic and add search/color filters)
+
                 client_socket.send("i got your mac".encode())  # מאשרים לסוכן שקיבלנו
 
 
                 #מונע מצב ששני threads יעדכנו את אותו MAC בו זמנית
                 # חשוב כי כמה Agents יכולים להתחבר במקביל
                 with lock:
-<<<<<<< HEAD
-                    mac = self.mac_agent
-=======
+
                     mac = mac_agent.strip()
->>>>>>> eb4e734 (Implement alerts table filtering by filename and risk level. Refactor alerts table refresh logic and add search/color filters)
+
                     # אם ה-MAC לא קיים עדיין
                     if mac not in self.mac_agent_user_dic:
 
@@ -113,12 +105,9 @@ class Server:
 
 
                 # הוספתי למילון מפתח שהוא הuser_id והערך שלו הוא הסוקט של הלקוח המחובר כרגע
-<<<<<<< HEAD
                 # שמירת socket לפי agent_id
-                self.agent_dic[self.agent_id] = client_socket
-=======
                 self.agent_dic[agent_id] = client_socket
->>>>>>> eb4e734 (Implement alerts table filtering by filename and risk level. Refactor alerts table refresh logic and add search/color filters)
+
                 print("agents", self.agent_dic)
 
             elif client_status == "GUI":
@@ -170,10 +159,6 @@ class Server:
 
                 command = list_data[0]
 
-<<<<<<< HEAD
-=======
-
->>>>>>> eb4e734 (Implement alerts table filtering by filename and risk level. Refactor alerts table refresh logic and add search/color filters)
                 if command == "agent":
                     #f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
                     agent_id = list_data[1]
@@ -245,7 +230,6 @@ class Server:
             print(f"Error: {e}")
         finally:
             try:
-<<<<<<< HEAD
                 # ניקוי חיבור כשהלקוח מתנתק
                 if list_data and len(list_data) > 4:
                     self.user_id = list_data[4]
@@ -261,13 +245,13 @@ class Server:
                         # ניקוי התראות אחרונות של המשתמש
                         if self.user_id in self.last_sent_alert_id:
                             del self.last_sent_alert_id[self.user_id]
-=======
+
                 if email:
                     self.logged_in_users.pop(email, None)
 
                 if user_id and user_id in self.last_sent_alert_id:
                     del self.last_sent_alert_id[user_id]
->>>>>>> eb4e734 (Implement alerts table filtering by filename and risk level. Refactor alerts table refresh logic and add search/color filters)
+
 
             except Exception as e:
                 print("finally error:", e)
@@ -277,11 +261,7 @@ class Server:
 
     def link_user_to_agent_session(self, user_id, mac_user):
         # ניקוי רווחים מה-MAC
-<<<<<<< HEAD
-        mac = self.mac_user
-=======
         mac = mac_user.strip()
->>>>>>> eb4e734 (Implement alerts table filtering by filename and risk level. Refactor alerts table refresh logic and add search/color filters)
 
         # מונע מצב שבו כמה משתמשים נרשמים לאותו MAC במקביל
         with lock:

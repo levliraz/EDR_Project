@@ -16,12 +16,14 @@ class Server:
 
         #שמירת last_id לכל משתמש
         # לכל משתמש נשמר ה־ID האחרון שנשלח אליו
-        self.last_sent_alert_id = {}
+        self.last_sent_alert_id_files = {}
+
+        self.last_sent_alert_id_process = {}
 
         self.agent_dic = {}
-        self.user_dic = {}
+        #self.user_dic = {}
         self.mac_agent_user_dic = {}
-        self.already_alerted_files = set()
+        #self.already_alerted_files = set()
 
         data_base.create_data_base()
 
@@ -33,11 +35,6 @@ class Server:
         #לא מאפשר כפילויות – אם תנסה להוסיף את אותו ערך פעמיים, הוא יישאר רק פעם אחת.
         #מאפשר בדיקה מהירה אם משהו קיים (value in my_set), הרבה יותר מהירה מ־list.
         #אין סדר– אין אינדקסים, זה לא רשימה, רק אוסף של ערכים ייחודיים.
-
-        # self.agent_id = None
-        # self.user_id = None
-        # self.mac_agent = None
-        # self.mac_user = None
 
         # הפונקציה מקבלת לקוחות ומוסיפה אותם לשרת
     def start(self):
@@ -87,7 +84,7 @@ class Server:
                 # חשוב כי כמה Agents יכולים להתחבר במקביל
                 with lock:
 
-                    mac = mac_agent.strip()
+                    mac = mac_agent
 
                     # אם ה-MAC לא קיים עדיין
                     if mac not in self.mac_agent_user_dic:
@@ -119,8 +116,6 @@ class Server:
 
                 mac_user = client_socket.recv(1024).decode('utf-8').strip()
                 client_socket.send("i got your mac".encode())
-
-                print("users", self.user_dic)
 
                 self.link_user_to_agent_session(user_id, mac_user)
 
@@ -159,18 +154,21 @@ class Server:
 
                 command = list_data[0]
 
-                if command == "agent":
-                    #f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
+                if command == "file":
+                    #f"file|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
                     agent_id = list_data[1]
                     file_name = list_data[4]
 
-                    if (agent_id, file_name) not in self.already_alerted_files:
-                        self.msg = data_base.handle_alerts(list_data)
-                        self.already_alerted_files.add((agent_id, file_name))
+                    # if (agent_id, file_name) not in self.already_alerted_files:
+                    #     self.msg = data_base.handle_files_alerts(list_data)
+                    #     self.already_alerted_files.add((agent_id, file_name))
+                    self.msg = data_base.handle_files_alerts(list_data)
+                    #else:
+                        #self.msg = f"File {file_name} already reported for this agent."
 
 
-                    else:
-                        self.msg = f"File {file_name} already reported for this agent."
+                elif command == "process":
+                    self.msg = data_base.handle_process_alerts(list_data)
 
 
                 elif command == "login":
@@ -190,11 +188,11 @@ class Server:
                 elif command == "register":
                     self.msg = data_base.handle_register(list_data)
 
-                elif command == "get_alerts":
+                elif command == "get_files_alerts":
                     user_id = list_data[4]
                     print(f"get_alerts requested by user_id = {user_id}")
                     # שליפה ממסד הנתונים
-                    alerts = self.get_alerts_for_user(user_id)
+                    alerts = self.get_alerts_for_user(user_id, command)
 
                     print("alerts:", alerts)
 
@@ -206,14 +204,28 @@ class Server:
                     print("rows_as_strings:",rows_as_strings)
                     self.msg = "||".join(rows_as_strings)
 
+                elif command == "get_process_alerts":
+                    user_id = list_data[4]
+                    print(f"get_alerts requested by user_id = {user_id}")
+                    # שליפה ממסד הנתונים
+                    alerts = self.get_alerts_for_user(user_id, command)
+
+                    print("alerts:", alerts)
+
+                    if not alerts:
+                        client_socket.send("NO_ALERTS".encode())
+                        continue
+
+                    rows_as_strings = ["|".join(row) for row in alerts]
+                    print("rows_as_strings:", rows_as_strings)
+                    self.msg = "||".join(rows_as_strings)
+
+
                 elif command == "delete_alert":
                     id_alert = list_data[1]
-                    agent_id = list_data[2]
-                    file_name = list_data[3]
-
                     #משתמשים בdiscard כי אם הקובץ כבר לא נמצא ב־set,לא תהיה שגיאה והשרת לא יתקע
                     # שימוש ב-discard כדי למנוע קריסה אם הערך לא קיים
-                    self.already_alerted_files.discard((agent_id, file_name))
+                    #self.already_alerted_files.discard((agent_id, file_name))
 
                     #קוראים לפעולה שמוחקת שורה ממסד הנתונים
                     self.msg = data_base.delete_row_from_data_base(id_alert)
@@ -230,27 +242,15 @@ class Server:
             print(f"Error: {e}")
         finally:
             try:
-                # ניקוי חיבור כשהלקוח מתנתק
-                if list_data and len(list_data) > 4:
-                    self.user_id = list_data[4]
-
-                    if list_data and len(list_data) > 2:
-                        email = list_data[2]
-
-                        # הסרת משתמש מחובר בצורה בטוחה
-                        # משתמשים בpop ולא בdelete כדי שאם הערך לא קיים במילון, זה לא יקרוס
-                        del self.logged_in_users[email]
-                        print(self.logged_in_users)
-
-                        # ניקוי התראות אחרונות של המשתמש
-                        if self.user_id in self.last_sent_alert_id:
-                            del self.last_sent_alert_id[self.user_id]
 
                 if email:
                     self.logged_in_users.pop(email, None)
 
-                if user_id and user_id in self.last_sent_alert_id:
-                    del self.last_sent_alert_id[user_id]
+                if user_id and user_id in self.last_sent_alert_id_files:
+                    del self.last_sent_alert_id_files[user_id]
+
+                if user_id and user_id in self.last_sent_alert_id_process:
+                    del self.last_sent_alert_id_process[user_id]
 
 
             except Exception as e:
@@ -261,7 +261,7 @@ class Server:
 
     def link_user_to_agent_session(self, user_id, mac_user):
         # ניקוי רווחים מה-MAC
-        mac = mac_user.strip()
+        mac = mac_user
 
         # מונע מצב שבו כמה משתמשים נרשמים לאותו MAC במקביל
         with lock:
@@ -282,7 +282,7 @@ class Server:
 
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
 
-    def get_alerts_for_user(self, user_id):
+    def get_alerts_for_user(self, user_id, command):
         print(f"Searching alerts for user {user_id}")
         print("Current MAC dictionary:", self.mac_agent_user_dic)
         agent_id = None
@@ -301,39 +301,71 @@ class Server:
             print(f"No agent found for user {user_id}")
             return []
 
-        # ה-ID האחרון שכבר נשלח למשתמש
-        last_id = self.last_sent_alert_id.get(user_id, 0)
+        if command == "get_files_alerts":
+            # ה-ID האחרון שכבר נשלח למשתמש
+            last_id = self.last_sent_alert_id_files.get(user_id, 0)
 
-        # שליפת רק התרעות חדשות
-        alerts = data_base.get_alerts_by_agent(agent_id, last_id)
-        print("alerts1:", alerts)
+            # שליפת רק התרעות חדשות
+            alerts = data_base.get_alerts_about_files(agent_id, last_id)
+            print("alerts1:", alerts)
 
-        result = []
+            result = []
 
-        for alert in alerts:
-            row = [
-                str(alert[0]),  # id
-                str(alert[1]),  #agent_id
-                str(alert[2]),  # time
-                str(alert[3]),  # type
-                str(alert[4]),  # file name
-                str(alert[5]),  # path
-                str(alert[6]),  # risk
-                str(alert[7]),  # reason
-                str(alert[8])  # status
-            ]
+            for alert in alerts:
+                row = [
+                    str(alert[0]),  # id
+                    str(alert[1]),  #agent_id
+                    str(alert[2]),  # time
+                    str(alert[3]),  # type
+                    str(alert[4]),  # file name
+                    str(alert[5]),  # path
+                    str(alert[6]),  # risk
+                    str(alert[7]),  # reason
+                    str(alert[8])  # status
+                ]
 
-            result.append(row)
+                result.append(row)
 
-        # עדכון ה-ID האחרון שנשלח
-        if alerts:
-            last_alert_id = alerts[-1][0]
+            # עדכון ה-ID האחרון שנשלח
+            if alerts:
+                last_alert_id = alerts[-1][0]
 
-            self.last_sent_alert_id[user_id] = last_alert_id
+                self.last_sent_alert_id_files[user_id] = last_alert_id
 
-        print("result:", result)
+            print("result:", result)
+            return result
 
-        return result
+        else:
+            # ה-ID האחרון שכבר נשלח למשתמש
+            last_id = self.last_sent_alert_id_process.get(user_id, 0)
+            # שליפת רק התרעות חדשות
+            alerts = data_base.get_alerts_about_process(agent_id, last_id)
+            print("alerts1:", alerts)
+
+            result = []
+            for alert in alerts:
+                row = [
+                    str(alert[0]),  # id
+                    str(alert[1]),  # agent_id
+                    str(alert[2]),  # time
+                    str(alert[3]),  # process_name
+                    str(alert[4]),  # pid
+                    str(alert[5]),  # exe_path
+                    str(alert[6]),  # risk
+                    str(alert[7]),  # reason
+                    str(alert[8])  # status
+                ]
+
+                result.append(row)
+
+            # עדכון ה-ID האחרון שנשלח
+            if alerts:
+                last_alert_id = alerts[-1][0]
+
+                self.last_sent_alert_id_process[user_id] = last_alert_id
+
+            print("result:", result)
+            return result
 
 
 if __name__ == "__main__":

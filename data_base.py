@@ -23,7 +23,7 @@ def create_data_base():
     """)
 
     c.execute("""
-        CREATE TABLE IF NOT EXISTS alerts (
+        CREATE TABLE IF NOT EXISTS files_alerts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             agent_id TEXT NOT NULL,
             timestamp TEXT,
@@ -37,6 +37,21 @@ def create_data_base():
         )
     """)
     # UNIQUE - השילוב של agent_id + file_name חייב להיות ייחודי בכל הטבלה
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS process_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id TEXT NOT NULL,
+            timestamp TEXT,
+            process_name TEXT,
+            pid TEXT NOT NULL,
+            exe_path TEXT NOT NULL,
+            risk_score INTEGER,
+            reasons TEXT,
+            status TEXT,
+            UNIQUE(agent_id, process_name, exe_path)
+        )
+    """)
 
     conn.commit()#שמירת השינויים
     conn.close()
@@ -103,7 +118,7 @@ def handle_register(list_data):
     return "Registration to the site was successful!,log in"
 
 
-def handle_alerts(list_data):
+def handle_files_alerts(list_data):
     #f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
 
     conn = sqlite3.connect(DB_PATH)
@@ -126,7 +141,7 @@ def handle_alerts(list_data):
 
     try:
         c.execute(
-            "INSERT INTO alerts (agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons, status) "
+            "INSERT INTO files_alerts (agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons, status) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons, status)
         )
@@ -142,14 +157,51 @@ def handle_alerts(list_data):
         conn.close()
 
 
-def get_alerts_by_agent(agent_id, last_id):
-    print("data_base_line 149")
+def handle_process_alerts(list_data):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # ננקה רווחים
+    list_data = [x.strip() for x in list_data]
+
+    #"process|{agent_id}|{time}|{process_name}|{pid}|{exe_path}|{risk_score}|{reasons}|in_progress"
+    agent_id = list_data[1]
+    timestamp = list_data[2]
+    process_name = list_data[3]
+    pid = list_data[4]
+    exe_path = list_data[5]
+    risk_score = int(list_data[6])
+    reasons = list_data[7]
+    status = list_data[8]
+
+    print("Inserting alert:", agent_id, timestamp, process_name, pid, exe_path, risk_score, reasons,
+          status)
+
+    try:
+        c.execute(
+            "INSERT INTO process_alerts (agent_id, timestamp, process_name, pid, exe_path, risk_score, reasons, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (agent_id, timestamp, process_name, pid, exe_path, risk_score, reasons, status)
+        )
+        conn.commit()
+        return f"Warning! A suspicious process named {process_name} was found on your computer."
+
+    except sqlite3.IntegrityError:
+        # כפילות – UNIQUE הפר
+        print(f"Duplicate alert ignored: {agent_id} - {process_name}")
+        return f"Process {process_name} already reported for this agent."
+
+    finally:
+        conn.close()
+
+
+def get_alerts_about_files(agent_id, last_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     query = """
         SELECT id, agent_id, timestamp, file_type, file_name, full_path, risk_score, reasons, status
-        FROM alerts
+        FROM files_alerts
         WHERE agent_id = ? AND id > ?
         ORDER BY id ASC
     """
@@ -158,7 +210,27 @@ def get_alerts_by_agent(agent_id, last_id):
     rows = cursor.fetchall()
     conn.close()
 
-    print("rows_in data_base:", rows)
+    print("rows_in files_alerts:", rows)
+
+    return rows
+
+
+def get_alerts_about_process(agent_id, last_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    query = """
+            SELECT id, agent_id, timestamp, process_name, pid, exe_path, risk_score, reasons, status
+            FROM process_alerts
+            WHERE agent_id = ? AND id > ?
+            ORDER BY id ASC
+        """
+
+    cursor.execute(query, (agent_id, last_id))
+    rows = cursor.fetchall()
+    conn.close()
+
+    print("rows_in process_alerts:", rows)
 
     return rows
 
@@ -171,7 +243,7 @@ def delete_row_from_data_base(alert_id):
     alert_id = int(alert_id)
 
     c.execute(
-        "DELETE FROM alerts WHERE id = ?",
+        "DELETE FROM files_alerts WHERE id = ?",
         (alert_id,)
     )
 

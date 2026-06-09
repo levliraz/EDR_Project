@@ -7,6 +7,7 @@ import os
 import mimetypes
 import uuid
 from getmac import get_mac_address
+import psutil
 
 # כתובת השרת והפורט שלו
 SERVER_IP = "127.0.0.1"
@@ -15,7 +16,6 @@ SERVER_PORT = 1237
 
 class Agent:
     def __init__(self):
-        self.all_suspicious = None
         """
         פונקציית האתחול יוצרת סוקט, מתחברת לשרת, מקבלת את המפתח הציבורי של השרת,
         שולחת סוג ה-Agent ומייצרת מפתח Fernet לשימוש בהצפנה סימטרית.
@@ -37,9 +37,15 @@ class Agent:
         # יצירת מפתח Fernet להצפנה סימטרית
         self.my_encryption_fernet_key, self.my_fernet = encryption.encryption_agent_key(self.server_public_key)
 
+        #משתנים לקבצים
         self.sent_files = set()# למנוע כפילויות
         self.suspicious_files = []
         self.suspicious_files_to_send = []
+
+        #משתנים לתהליכים
+        self.suspicious_processes = []
+        self.suspicious_processes_to_send = []
+        self.sent_processes = set()
 
         # קריאה לפונקציה הראשית
         self.main()
@@ -108,26 +114,30 @@ class Agent:
                             while True:
                                 print("in while true", count)
 
-                                self.all_suspicious = []  # נקה
                                 self.suspicious_files = []  # נקה
                                 self.suspicious_files_to_send = []  # נקה
+
+                                self.suspicious_processes = []
+                                self.suspicious_processes_to_send = []
 
                                 # סריקה מלאה של כל התיקיות
                                 for path in SCAN_DIRS:
                                     if os.path.exists(path):
                                         self.scan_path(path)
-
                                 print("after full scan – suspicious_files:", len(self.suspicious_files))
 
                                 # עכשיו בדוק מה חדש
                                 self.if_file_exist()
-
                                 print("after if_file_exist – to send:", len(self.suspicious_files_to_send))
 
                                 # שלח רק את החדשים
                                 self.send_messages_files()
-
                                 print("after send")
+
+                                self.scan_processes()
+                                self.if_process_exist()
+                                self.send_messages_processes()
+
                                 count += 1
                                 time.sleep(10)
 
@@ -140,7 +150,8 @@ class Agent:
     def scan_path(self, path):
         try:
             if os.path.isfile(path):
-                self.all_suspicious.extend(self.check_suspicious_file(path))
+                #self.all_suspicious.extend(self.check_suspicious_file(path))
+                self.check_suspicious_file(path)
 
             elif os.path.isdir(path):
                 for item in os.listdir(path):
@@ -150,6 +161,22 @@ class Agent:
         except PermissionError:
             # אין הרשאה – מדלגים
             return
+
+    def scan_processes(self):
+        self.suspicious_processes = []
+
+        for proc in psutil.process_iter(
+                ['pid', 'name', 'exe', 'memory_percent']
+        ):
+            try:
+                self.check_suspicious_process(proc)
+
+            except (
+                    psutil.NoSuchProcess,
+                    psutil.AccessDenied,
+                    psutil.ZombieProcess
+            ):
+                continue
 
     def check_suspicious_file(self, file_path):
         file_name = os.path.basename(file_path)
@@ -215,12 +242,52 @@ class Agent:
                 "reasons": reasons
             })
 
-        self.if_file_exist()
-        return self.suspicious_files_to_send
+    def check_suspicious_process(self, proc):
+        pid = proc.info['pid']
+        name = proc.info['name']
+        exe = proc.info['exe']
+        memory = proc.info['memory_percent']
+
+        risk_score = 0
+        reasons = []
+
+        if exe:
+            exe_lower = exe.lower()
+
+            if "temp" in exe_lower:
+                risk_score += 40
+                reasons.append("Running from Temp folder")
+
+            if "downloads" in exe_lower:
+                risk_score += 25
+                reasons.append("Running from Downloads folder")
+
+        fake_names = [
+            "svchost.exe",
+            "explorer.exe",
+            "winlogon.exe"
+        ]
+
+        if name and name.lower() in fake_names:
+            if exe and "windows" not in exe.lower():
+                risk_score += 40
+                reasons.append("Suspicious system process name")
+
+        if memory and memory > 20:
+            risk_score += 20
+            reasons.append("High memory usage")
+
+        if risk_score > 0:
+            self.suspicious_processes.append({
+                "pid": pid,
+                "process_name": name,
+                "exe_path": exe,
+                "risk_score": min(risk_score, 100),
+                "reasons": reasons
+            })
+
 
     def if_file_exist(self):
-        #self.suspicious_files_to_send = []  # נקה כל פעם, כדי שלא יצטברו דברים ישנים
-
         for file_dict in self.suspicious_files:  # ← שינוי: file_dict הוא dict!
             full_path = file_dict['full_path']  # לוקחים את הנתיב מה-dict
             if full_path not in self.sent_files:  # בודקים אם לא נשלח כבר
@@ -229,6 +296,19 @@ class Agent:
                 print(f"Added new suspicious file to send: {file_dict['file_name']}")
 
         print("suspicious_files_to_send-", self.suspicious_files_to_send)
+
+    def if_process_exist(self):
+        for proc in self.suspicious_processes:
+
+            unique_id = (
+                proc['pid'],
+                proc['exe_path']
+            )
+
+            if unique_id not in self.sent_processes:
+                self.sent_processes.add(unique_id)
+
+                self.suspicious_processes_to_send.append(proc)
 
     def send_messages_files(self):
         """
@@ -251,18 +331,18 @@ class Agent:
         print("self.suspicious_files_to_send:", self.suspicious_files_to_send)
 
         for file in self.suspicious_files_to_send:
-            #print("246")
-            message = f"agent|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
+            message = f"file|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
             encrypted_message = encryption.symmetric_encrypt_for_agent_server_message(self.my_fernet, message)
 
             try:
                 print("enc", encrypted_message)
                 self.sock.send(encrypted_message)
-                #print("254")
                 try:
                     self.sock.settimeout(5)
-                    #print("237")
-                    data = self.sock.recv(1024).decode()
+                    try:
+                        data = self.sock.recv(1024).decode()
+                    finally:
+                        self.sock.settimeout(None)
                     print("Server response:", data)
                 except socket.timeout:
                     print("No response from server, continuing...")
@@ -271,6 +351,57 @@ class Agent:
 
         # אחרי שליחה – ננקה את הרשימה, כדי שלא נשלח שוב באותו סיבוב
         self.suspicious_files_to_send = []
+
+    def send_messages_processes(self):
+
+        if not self.suspicious_processes_to_send:
+            print("No new suspicious processes to send this cycle")
+
+            message = "No new suspicious processes to send this cycle"
+            encrypted_message = encryption.symmetric_encrypt_for_agent_server_message(self.my_fernet, message)
+            self.sock.send(encrypted_message)
+            self.sock.recv(1024).decode()
+            return
+
+        print("suspicious_processes:", self.suspicious_processes)
+        print("self.suspicious_processes_to_send:", self.suspicious_processes_to_send)
+
+        for proc in self.suspicious_processes_to_send:
+            message = (
+                f"process|"
+                f"{self.agent_id}|"
+                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|"
+                f"{proc['process_name']}|"
+                f"{proc['pid']}|"
+                f"{proc['exe_path']}|"
+                f"{proc['risk_score']}|"
+                f"{','.join(proc['reasons'])}|"
+                f"in_progress"
+            )
+
+            encrypted_message = (
+                encryption.symmetric_encrypt_for_agent_server_message(
+                    self.my_fernet,
+                    message
+                )
+            )
+
+            try:
+                print("enc", encrypted_message)
+                self.sock.send(encrypted_message)
+                try:
+                    self.sock.settimeout(5)
+                    try:
+                        data = self.sock.recv(1024).decode()
+                    finally:
+                        self.sock.settimeout(None)
+                    print("Server response:", data)
+                except socket.timeout:
+                    print("No response from server, continuing...")
+            except Exception as e:
+                print("Send failed:", e)
+
+        self.suspicious_processes_to_send = []
 
 
 if __name__ == "__main__":

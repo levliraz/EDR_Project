@@ -14,9 +14,6 @@ class UserPage:
         self.process_table = None
         self.process_data = []
 
-        self.show_files = False
-        self.show_processes = False
-
         self.files_visible = False
         self.process_visible = False
 
@@ -25,7 +22,6 @@ class UserPage:
         self.user_status_message = None
         self.btn_files = None
         self.lbl_name = None
-        self.search_ctrl = None
         self.panel_scrolled_files = None
         self.panel_scrolled_processes = None
         self.selected_file_path = None
@@ -36,8 +32,17 @@ class UserPage:
         self.timer_for_update = None
         self.timer_for_fetch = None
         self.selected_row_data = None
+        self.btn_processes = None
+        self.btn_hide_files = None
+        self.btn_hide_processes = None
+        self.search_ctrl = None
+        self.color_choice = None
+        self.process_search_ctrl = None
+        self.process_color_choice = None
         self.current_search = ""
         self.current_color_filter = "הכל"
+        self.process_search = ""
+        self.process_color_filter = "הכל"
 
     def create_user_page(self):
         # טיימר לשליחת בקשה לשרת כל חצי דקה
@@ -55,21 +60,18 @@ class UserPage:
         self.vbox.Add(self.user_status_message, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP, 20)
 
         self.lbl_name = wx.StaticText(self.panel, label="הראה לי קבצים חשודים שרצים במחשב")
-
         self.vbox.Add(self.lbl_name, 0, wx.CENTER | wx.TOP, 20)
 
         # כפתור הורדה
         self.btn_files = wx.Button(self.panel, label="הצג טבלת קבצים")
         self.btn_files.SetBackgroundColour(wx.Colour(255, 255, 255))
         self.vbox.Add(self.btn_files, 0, wx.CENTER | wx.TOP, 20)
-
         self.btn_files.Bind(wx.EVT_BUTTON, self.on_files_click)
 
-        self.btn_processes = wx.Button(self.panel,label="הצג טבלת תהליכים")
+        self.btn_processes = wx.Button(self.panel, label="הצג טבלת תהליכים")
         self.btn_processes.SetBackgroundColour(wx.Colour(255, 255, 255))
-        self.vbox.Add(self.btn_processes,0,wx.CENTER | wx.TOP,10)
-
-        self.btn_processes.Bind(wx.EVT_BUTTON,self.on_process_click)
+        self.vbox.Add(self.btn_processes, 0, wx.CENTER | wx.TOP, 10)
+        self.btn_processes.Bind(wx.EVT_BUTTON, self.on_process_click)
 
         self.btn_hide_files = wx.Button(self.panel, label="הסתר טבלת קבצים")
         self.btn_hide_files.Bind(wx.EVT_BUTTON, self.on_hide_files)
@@ -82,11 +84,12 @@ class UserPage:
         self.btn_hide_processes.Hide()
 
         # חיפוש לפי שם קובץ
+
+        self.files_container = wx.BoxSizer(wx.VERTICAL)
+
         self.search_ctrl = wx.SearchCtrl(self.panel)
         self.search_ctrl.Hide()
         self.search_ctrl.Bind(wx.EVT_TEXT, self.on_search)
-
-        self.vbox.Add(self.search_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 10)
 
         # פילטר צבע
         self.color_choice = wx.Choice(
@@ -97,7 +100,26 @@ class UserPage:
         self.color_choice.Hide()
         self.color_choice.Bind(wx.EVT_CHOICE, self.on_color_filter)
 
-        self.vbox.Add(self.color_choice, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 10)
+        self.files_container.Add(self.search_ctrl, 0, wx.EXPAND | wx.ALL, 5)
+        self.files_container.Add(self.color_choice, 0, wx.EXPAND | wx.ALL, 5)
+
+        #PROCESSES CONTAINER
+        self.process_container = wx.BoxSizer(wx.VERTICAL)
+
+        self.process_search_ctrl = wx.SearchCtrl(self.panel)
+        self.process_search_ctrl.Hide()
+        self.process_search_ctrl.Bind(wx.EVT_TEXT, self.on_process_search)
+
+        self.process_color_choice = wx.Choice(
+            self.panel,
+            choices=["הכל", "אדום", "צהוב", "ירוק"]
+        )
+        self.process_color_choice.SetSelection(0)
+        self.process_color_choice.Hide()
+        self.process_color_choice.Bind(wx.EVT_CHOICE, self.on_process_color_filter)
+
+        self.process_container.Add(self.process_search_ctrl, 0, wx.EXPAND | wx.ALL, 5)
+        self.process_container.Add(self.process_color_choice, 0, wx.EXPAND | wx.ALL, 5)
 
         # דוחף את הכפתור התחתון למטה
         self.vbox.AddStretchSpacer()
@@ -109,13 +131,17 @@ class UserPage:
         btn_disconnection = wx.Button(self.panel, label="התנתקות")
         btn_disconnection.SetBackgroundColour(wx.Colour(255, 255, 255))
         btn_disconnection.SetFont(font_big)
+        btn_disconnection.Bind(wx.EVT_BUTTON, lambda e: self.design.disconnection())
         bottom_sizer.Add(btn_disconnection, 0, wx.RIGHT | wx.BOTTOM, 20)
+
+        self.vbox.Add(bottom_sizer, 0, wx.EXPAND)
 
         # כפתור מחיקה של קובץ
         self.delete_file_button = wx.Button(self.panel, label="מחק")
         self.delete_file_button.SetBackgroundColour(wx.Colour(200, 0, 0))  # אדום חזק
         self.delete_file_button.SetForegroundColour(wx.Colour(255, 255, 255))  # טקסט לבן
         font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+
         self.delete_file_button.SetFont(font)
         self.delete_file_button.SetMinSize((120, 45))  # גודל כפתור
         self.delete_file_button.Hide()
@@ -123,10 +149,9 @@ class UserPage:
 
         self.vbox.Add(self.delete_file_button, 0, wx.CENTER | wx.TOP, 10)
 
-        # חיבור אירוע
-        btn_disconnection.Bind(wx.EVT_BUTTON, lambda e: self.design.disconnection())
+        self.vbox.Add(self.files_container, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
+        self.vbox.Add(self.process_container, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
-        self.vbox.Add(bottom_sizer, 0, wx.EXPAND)
         self.panel.SetSizer(self.vbox)
 
         return self.panel
@@ -144,7 +169,7 @@ class UserPage:
             "null"
         )
 
-        print("PROCESS DATA:", data)
+        print("FILES DATA:", data)
 
         if not data or data == "NO_ALERTS":
             return
@@ -157,7 +182,7 @@ class UserPage:
                 continue
 
             row = alert.split("|")
-            print("PROCESS ROW:", row)
+            print("FILES ROW:", row)
 
             if len(row) < 9:
                 continue
@@ -195,17 +220,21 @@ class UserPage:
 
     def on_files_click(self, event):
         self.show_alerts_table()
-        self.set_state(files=True, processes=False)
+        self.files_visible = True
+        self.update_ui()
 
     def on_process_click(self, event):
         self.show_process_table()
-        self.set_state(files=False, processes=True)
+        self.process_visible = True
+        self.update_ui()
 
     def on_hide_files(self, event):
-        self.set_state(files=False, processes=self.process_visible)
+        self.files_visible = False
+        self.update_ui()
 
     def hide_process_table(self, event):
-        self.set_state(files=self.files_visible, processes=False)
+        self.process_visible = False
+        self.update_ui()
 
     # מזהה איזו שורה נלחצה,שומר את השורה ברשימה
     def on_row_click(self, event):
@@ -296,7 +325,9 @@ class UserPage:
 
         sizer_scrolled.Add(self.alerts_table, 1, wx.EXPAND | wx.ALL, 5)
 
-        self.vbox.Insert(3, self.panel_scrolled_files, 1, wx.EXPAND | wx.ALL, 10)
+        self.files_container.Add(self.panel_scrolled_files, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.refresh_table()
 
         self.panel.Layout()
 
@@ -322,22 +353,26 @@ class UserPage:
 
         sizer_scrolled.Add(self.process_table, 1, wx.EXPAND | wx.ALL, 5)
 
-        self.vbox.Insert(4, self.panel_scrolled_processes, 1, wx.EXPAND | wx.ALL, 10)
+        self.process_container.Add(self.panel_scrolled_processes, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.refresh_process_table()
 
         self.panel.Layout()
 
     def update_file_table(self, list_data):
-        if not self.alerts_table:
-            return
-
         if len(list_data) < 9:
             print("Bad row:", list_data)
             return
 
         self.alerts_data.append(list_data)
+        print("l_data:", self.alerts_data)
 
         alert_id = list_data[0]
         self.row_map[alert_id] = list_data
+
+        if not self.alerts_table:
+            print("files table does not exist")
+            return
 
         self.refresh_table()
 
@@ -347,14 +382,16 @@ class UserPage:
             self.panel_scrolled_files.Refresh()
 
     def update_process_table(self, list_data):
-        if not self.process_table:
-            return
-
         if len(list_data) < 9:
             print("Bad row:", list_data)
             return
 
         self.process_data.append(list_data)
+        print("l_data:", self.process_data)
+
+        if not self.process_table:
+            print("process table does not exist")
+            return
 
         self.refresh_process_table()
 
@@ -371,7 +408,18 @@ class UserPage:
         self.current_color_filter = self.color_choice.GetStringSelection()
         self.refresh_table()
 
+    def on_process_search(self, event):
+        self.process_search = self.process_search_ctrl.GetValue().lower()
+        self.refresh_process_table()
+
+    def on_process_color_filter(self, event):
+        self.process_color_filter = self.process_color_choice.GetStringSelection()
+        self.refresh_process_table()
+
     def refresh_table(self):
+        if not self.alerts_table:
+            return
+
         self.alerts_table.DeleteAllItems()
 
         row_number = 1
@@ -380,22 +428,20 @@ class UserPage:
 
             file_name = row_data[4].lower()
 
-            # סינון לפי שם
+            # חיפוש
             if self.current_search:
                 if self.current_search not in file_name:
                     continue
 
-            # סינון לפי צבע
             risk = int(row_data[6])
 
+            # פילטר צבע (קבצים!)
             if self.current_color_filter == "אדום":
                 if risk < 50:
                     continue
-
             elif self.current_color_filter == "צהוב":
                 if risk < 30 or risk >= 50:
                     continue
-
             elif self.current_color_filter == "ירוק":
                 if risk >= 30:
                     continue
@@ -426,12 +472,20 @@ class UserPage:
         self.alerts_table.Refresh()
 
     def refresh_process_table(self):
+        if not self.process_table:
+            return
 
         self.process_table.DeleteAllItems()
 
         row_number = 1
 
         for row_data in self.process_data:
+
+            process_name = row_data[3].lower()
+
+            if self.process_search:
+                if self.process_search not in process_name:
+                    continue
 
             risk = int(row_data[6])
 
@@ -460,9 +514,13 @@ class UserPage:
 
         self.process_table.Refresh()
 
-    def set_state(self, files=False, processes=False):
-        self.files_visible = files
-        self.process_visible = processes
+    def set_state(self, files=None, processes=None):
+        if files is not None:
+            self.files_visible = files
+
+        if processes is not None:
+            self.process_visible = processes
+
         self.update_ui()
 
     def update_ui(self):
@@ -470,18 +528,18 @@ class UserPage:
         if self.files_visible:
             self.btn_files.Hide()
             self.btn_hide_files.Show()
-
             self.search_ctrl.Show()
             self.color_choice.Show()
+            self.files_container.Show()
 
             if self.panel_scrolled_files:
                 self.panel_scrolled_files.Show()
         else:
             self.btn_hide_files.Hide()
             self.btn_files.Show()
-
             self.search_ctrl.Hide()
             self.color_choice.Hide()
+            self.files_container.Hide()
 
             if self.panel_scrolled_files:
                 self.panel_scrolled_files.Hide()
@@ -490,11 +548,19 @@ class UserPage:
         if self.process_visible:
             self.btn_processes.Hide()
             self.btn_hide_processes.Show()
+            self.process_search_ctrl.Show()
+            self.process_color_choice.Show()
+            self.process_container.Show()
+
             if self.panel_scrolled_processes:
                 self.panel_scrolled_processes.Show()
         else:
             self.btn_hide_processes.Hide()
             self.btn_processes.Show()
+            self.process_search_ctrl.Hide()
+            self.process_color_choice.Hide()
+            self.process_container.Hide()
+
             if self.panel_scrolled_processes:
                 self.panel_scrolled_processes.Hide()
 

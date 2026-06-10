@@ -2,7 +2,7 @@ import wx
 import field_integrity_checks
 import subprocess
 import sys
-import psutil #הספרייה הזאת מאפשרת לראות תהליכים
+import psutil  #הספרייה הזאת מאפשרת לראות תהליכים
 
 #הפונקציה מחזירה true אם הסוכן כבר רץ במחשב, אחרת מחזירה false
 def is_agent_running():

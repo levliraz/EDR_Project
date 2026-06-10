@@ -84,9 +84,9 @@ class MainFrame(wx.Frame):
     def create_user_id(self):
         # ניצור user_id ונשלח אותו לשרת.
         # במחשב שלי
-        user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
+        #user_id_path = r"C:\Users\TLV\EDR_Project\user_id.txt"
         # במחשב בבית ספר
-        #user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
+        user_id_path = r"C:\Users\Pc2\PycharmProjects\pythonProject\EDR_Project\user_id.txt"
         self.user_id = None
         if os.path.exists(user_id_path):
             self.user_id = open(user_id_path, "r").read().strip()
@@ -95,7 +95,6 @@ class MainFrame(wx.Frame):
             self.user_id = str(uuid.uuid4())
             with open(user_id_path, "w") as f:
                 f.write(self.user_id)
-
 
     def show_panel(self, name):
         self.panel_home.Hide()

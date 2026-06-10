@@ -54,9 +54,9 @@ class Agent:
     def create_agent_id(self):
         # נתיב תיקיית ה-Agent
         #במחשב שלי
-        BASE_DIR = r"C:\Users\TLV\Documents\agent"
+        #BASE_DIR = r"C:\Users\TLV\Documents\agent"
         #במחשב הבית ספר
-        #BASE_DIR = r"C:\Users\Pc2\Documents\agent"
+        BASE_DIR = r"C:\Users\Pc2\Documents\agent"
         FILES_DIR = os.path.join(BASE_DIR, "suspicious_files")
         agent_id_dir = os.path.join(BASE_DIR, "agent_id.txt")
         # קריאה או יצירה של agent_id
@@ -248,6 +248,10 @@ class Agent:
         exe = proc.info['exe']
         memory = proc.info['memory_percent']
 
+        print("NAME =", name)
+        print("EXE =", exe)
+        print("----------------")
+
         risk_score = 0
         reasons = []
 
@@ -263,17 +267,14 @@ class Agent:
                 reasons.append("Running from Downloads folder")
 
         fake_names = [
-            "svchost.exe",
-            "explorer.exe",
-            "winlogon.exe"
-        ]
+            "svchost.exe", "explorer.exe", "winlogon.exe"]
 
         if name and name.lower() in fake_names:
             if exe and "windows" not in exe.lower():
                 risk_score += 40
                 reasons.append("Suspicious system process name")
 
-        if memory and memory > 20:
+        if memory and memory > 10:
             risk_score += 20
             reasons.append("High memory usage")
 
@@ -285,7 +286,6 @@ class Agent:
                 "risk_score": min(risk_score, 100),
                 "reasons": reasons
             })
-
 
     def if_file_exist(self):
         for file_dict in self.suspicious_files:  # ← שינוי: file_dict הוא dict!

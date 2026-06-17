@@ -273,7 +273,7 @@ class Agent:
                 risk_score += 40
                 reasons.append("Suspicious system process name")
 
-        if memory and memory > 20:
+        if memory and memory > 3:
             risk_score += 20
             reasons.append("High memory usage")
 

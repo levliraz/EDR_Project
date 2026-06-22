@@ -2,7 +2,7 @@ import wx
 import field_integrity_checks
 import subprocess
 import sys
-import psutil #הספרייה הזאת מאפשרת לראות תהליכים
+import psutil  #הספרייה הזאת מאפשרת לראות תהליכים
 
 #הפונקציה מחזירה true אם הסוכן כבר רץ במחשב, אחרת מחזירה false
 def is_agent_running():
@@ -45,6 +45,8 @@ class LoginPage:
         # יצירת פונט גדול
         font_big = wx.Font(16, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
 
+        font_small = wx.Font(12,wx.FONTFAMILY_DEFAULT,wx.FONTSTYLE_NORMAL,wx.FONTWEIGHT_NORMAL)
+
         # תיבת הודעת שגיאה
         self.login_message = wx.StaticText(self.panel, label="")
         self.login_message.SetForegroundColour(wx.RED)
@@ -54,7 +56,7 @@ class LoginPage:
         # הודעת סטטוס
         self.client_status_message_login = wx.StaticText(self.panel, label="")
         self.client_status_message_login.SetForegroundColour(wx.WHITE)
-        self.client_status_message_login.SetFont(font_big)
+        self.client_status_message_login.SetFont(font_small)
         self.vbox.Add(self.client_status_message_login, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP, 20)
 
         # כותרת למסך

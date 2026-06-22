@@ -96,7 +96,6 @@ class MainFrame(wx.Frame):
             with open(user_id_path, "w") as f:
                 f.write(self.user_id)
 
-
     def show_panel(self, name):
         self.panel_home.Hide()
         self.panel_login.Hide()

@@ -1,5 +1,29 @@
 import wx
 import os
+import psutil
+
+
+def terminate_process(pid):
+    try:
+        p = psutil.Process(int(pid))
+        p.terminate()
+
+        try:
+            p.wait(timeout=3)
+        except psutil.TimeoutExpired:
+            p.kill()
+
+        print("תהליך נסגר בהצלחה")
+
+    except psutil.NoSuchProcess:
+        print(f"התהליך {pid} כבר לא קיים")
+
+    except psutil.AccessDenied:
+        print(f"אין הרשאה לסגור תהליך {pid}")
+
+    except Exception as e:
+        print(f"שגיאה לא צפויה בסיום תהליך {pid}: {repr(e)}")
+
 
 class UserPage:
     def __init__(self, parent):
@@ -35,13 +59,17 @@ class UserPage:
         self.panel_scrolled_files = None
         self.panel_scrolled_processes = None
         self.selected_file_path = None
+        self.selected_process_pid = None
         self.row_map = {}
+        self.process_row_map = {}
         self.design = parent
-        self.timer_for_delete = None
         self.delete_file_button = None
+        self.end_process_button = None
         self.timer_for_update = None
         self.timer_for_fetch = None
         self.selected_row_data = None
+        self.files_sizer = None
+        self.process_sizer = None
         self.current_search = ""
         self.process_current_search = ""
         self.current_color_filter = "הכל"
@@ -62,7 +90,7 @@ class UserPage:
         self.user_status_message.SetFont(font_big)
         self.vbox.Add(self.user_status_message, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP, 20)
 
-        self.lbl_name = wx.StaticText(self.panel, label="הראה לי קבצים ןתהליכים חשודים שרצים במחשב")
+        self.lbl_name = wx.StaticText(self.panel, label="הראה לי קבצים ותהליכים חשודים שרצים במחשב")
 
         self.vbox.Add(self.lbl_name, 0, wx.CENTER | wx.TOP, 20)
 
@@ -132,7 +160,7 @@ class UserPage:
         self.btn_hide_processes.Hide()
 
         # דוחף את הכפתור התחתון למטה
-        #self.vbox.AddStretchSpacer()
+        self.vbox.AddStretchSpacer()
         # סייזר תחתון
         bottom_sizer = wx.BoxSizer(wx.HORIZONTAL)
         bottom_sizer.AddStretchSpacer()
@@ -151,9 +179,20 @@ class UserPage:
         self.delete_file_button.SetFont(font)
         self.delete_file_button.SetMinSize((120, 45))  # גודל כפתור
         self.delete_file_button.Hide()
-        self.delete_file_button.Bind(wx.EVT_BUTTON, self.delete_file)
 
+        self.delete_file_button.Bind(wx.EVT_BUTTON, self.delete_file)
         self.vbox.Add(self.delete_file_button, 0, wx.CENTER | wx.TOP, 10)
+
+        #כפתור מחיקה של תהליך
+        self.end_process_button = wx.Button(self.panel, label="סיים תהליך")
+        self.end_process_button.SetBackgroundColour(wx.Colour(200, 0, 0))
+        self.end_process_button.SetForegroundColour(wx.Colour(255, 255, 255))
+        self.end_process_button.SetFont(font)
+        self.end_process_button.SetMinSize((120, 45))  # גודל כפתור
+        self.end_process_button.Hide()
+
+        self.end_process_button.Bind(wx.EVT_BUTTON, self.end_process)
+        self.vbox.Add(self.end_process_button, 0, wx.CENTER | wx.TOP, 10)
 
         # חיבור אירוע
         btn_disconnection.Bind(wx.EVT_BUTTON, lambda e: self.design.disconnection())
@@ -176,7 +215,7 @@ class UserPage:
             "null"
         )
 
-        print("PROCESS DATA:", data)
+        print("FILES DATA:", data)
 
         if not data or data == "NO_ALERTS":
             return
@@ -189,7 +228,7 @@ class UserPage:
                 continue
 
             row = alert.split("|")
-            print("PROCESS ROW:", row)
+            print("FILE ROW:", row)
 
             if len(row) < 9:
                 continue
@@ -237,6 +276,9 @@ class UserPage:
         self.btn_files.Hide()
         self.btn_hide_files.Show()
 
+        self.lbl_name.Hide()
+        self.user_status_message.Hide()
+
         self.panel.Layout()
 
     def on_process_click(self, event):
@@ -251,6 +293,9 @@ class UserPage:
         self.search_process_ctrl.Show()
         self.color_process_choice.Show()
 
+        self.lbl_name.Hide()
+        self.user_status_message.Hide()
+
         self.panel.Layout()
 
     def on_hide_files(self, event):
@@ -262,6 +307,9 @@ class UserPage:
 
         self.btn_hide_files.Hide()
         self.btn_files.Show()
+
+        self.lbl_name.Show()
+        self.user_status_message.Show()
 
         self.panel.Layout()
 
@@ -275,6 +323,9 @@ class UserPage:
         self.search_process_ctrl.Hide()
         self.color_process_choice.Hide()
 
+        self.lbl_name.Show()
+        self.user_status_message.Show()
+
         self.panel.Layout()
 
     # מזהה איזו שורה נלחצה,שומר את השורה ברשימה
@@ -285,10 +336,21 @@ class UserPage:
         # לוקחים את ה-ID מהעמודה הראשונה בטבלה
         alert_id = self.alerts_table.GetItem(index, 1).GetText()
 
-        # מביאים את כל המידע מהמילון
+        #מביאים את כל המידע מהמילון
         self.selected_row_data = self.row_map[alert_id]
 
         self.delete_file_button.Show()
+        self.panel.Layout()
+
+    def on_process_row_click(self, event):
+        index = event.GetIndex()
+        self.selected_process_pid = self.process_table.GetItem(index, 4).GetText()
+
+        alert_id = self.process_table.GetItem(index, 1).GetText()
+
+        self.selected_row_data = self.process_row_map[alert_id]
+
+        self.end_process_button.Show()
         self.panel.Layout()
 
     def delete_file(self, event):
@@ -342,14 +404,55 @@ class UserPage:
         self.selected_file_path = None
         self.panel.Layout()
 
+    def end_process(self, event):
+        if not self.selected_process_pid:
+            return
+
+        dlg = wx.MessageDialog(
+            self.panel,
+            "האם אתה בטוח שתרצה לסיים את התהליך?",
+            "אישור סיום",
+            wx.YES_NO | wx.ICON_WARNING
+        )
+
+        result = dlg.ShowModal()
+        dlg.Destroy()
+
+        if result == wx.ID_YES:
+            pid = self.selected_process_pid
+
+            terminate_process(pid)
+
+            row_data = self.selected_row_data
+            self.design.send_and_receive_data("delete_process_alert", row_data, "null", "null")
+
+            alert_id = row_data[0]
+
+            for i, process in enumerate(self.process_data):
+                if process[0] == alert_id:
+                    self.process_data.pop(i)
+                    break
+
+            if alert_id in self.process_row_map:
+                del self.process_row_map[alert_id]
+
+            self.refresh_process_table()
+
+        self.end_process_button.Hide()
+        self.selected_process_pid = None
+        self.panel.Layout()
+
+
     def show_alerts_table(self):
         if self.alerts_table:
             return
 
         self.panel_scrolled_files = wx.ScrolledWindow(self.panel, style=wx.VSCROLL)
-        self.panel_scrolled_files.SetMinSize((-1, 250))
+        self.panel_scrolled_files.SetInitialSize((-1, 180))
         sizer_scrolled = wx.BoxSizer(wx.VERTICAL)
         self.panel_scrolled_files.SetSizer(sizer_scrolled)
+
+        self.panel_scrolled_files.SetScrollRate(10, 10)
 
         self.alerts_table = wx.ListCtrl(
             self.panel_scrolled_files,
@@ -369,21 +472,27 @@ class UserPage:
 
         self.files_sizer.Insert(1, self.panel_scrolled_files, 1, wx.EXPAND | wx.ALL, 10)
 
+        self.refresh_table()
         self.panel.Layout()
+        self.panel.Refresh()
 
     def show_process_table(self):
         if self.process_table:
             return
 
         self.panel_scrolled_processes = wx.ScrolledWindow(self.panel, style=wx.VSCROLL)
-        self.panel_scrolled_processes.SetMinSize((-1, 250))
+        self.panel_scrolled_processes.SetInitialSize((-1, 180))
         sizer_scrolled = wx.BoxSizer(wx.VERTICAL)
         self.panel_scrolled_processes.SetSizer(sizer_scrolled)
+
+        self.panel_scrolled_processes.SetScrollRate(10, 10)
 
         self.process_table = wx.ListCtrl(
             self.panel_scrolled_processes,
             style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_HRULES | wx.LC_VRULES
         )
+
+        self.process_table.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_process_row_click)
 
         columns = ["", "ID", "Timestamp", "Process", "PID", "Path", "Risk", "Reason", "Status"]
         widths = [40, 40, 170, 180, 80, 300, 50, 250, 120]
@@ -396,10 +505,13 @@ class UserPage:
 
         self.process_sizer.Insert(1, self.panel_scrolled_processes, 1, wx.EXPAND | wx.ALL, 10)
 
+        self.refresh_process_table()
         self.panel.Layout()
+        self.panel.Refresh()
 
     def update_file_table(self, list_data):
         if not self.alerts_table:
+            self.alerts_data.append(list_data)
             return
 
         if len(list_data) < 9:
@@ -420,6 +532,7 @@ class UserPage:
 
     def update_process_table(self, list_data):
         if not self.process_table:
+            self.process_data.append(list_data)
             return
 
         if len(list_data) < 9:
@@ -427,6 +540,9 @@ class UserPage:
             return
 
         self.process_data.append(list_data)
+
+        alert_id = list_data[0]
+        self.process_row_map[alert_id] = list_data
 
         self.refresh_process_table()
 
@@ -504,6 +620,7 @@ class UserPage:
             row_number += 1
 
         self.alerts_table.Refresh()
+        self.panel.Layout()
 
     def refresh_process_table(self):
 
@@ -559,3 +676,8 @@ class UserPage:
             row_number += 1
 
         self.process_table.Refresh()
+        self.panel.Layout()
+
+        print("PROCESS TABLE EXISTS:", self.process_table is not None)
+        print("ROWS:", len(self.process_data))
+        print("VISIBLE ROWS:", self.process_table.GetItemCount())

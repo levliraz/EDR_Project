@@ -253,3 +253,21 @@ def delete_row_from_data_base(alert_id):
     print("Deleted alert:", alert_id)
 
     return "The file deleted successfully"
+
+def delete_row_from_process_data_base(alert_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    alert_id = int(alert_id)
+
+    c.execute(
+        "DELETE FROM process_alerts WHERE id = ?",
+        (alert_id,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    print("Deleted alert:", alert_id)
+
+    return "The process deleted successfully"

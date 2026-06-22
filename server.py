@@ -230,6 +230,10 @@ class Server:
                     #קוראים לפעולה שמוחקת שורה ממסד הנתונים
                     self.msg = data_base.delete_row_from_data_base(id_alert)
 
+                elif command == "delete_process_alert":
+                    id_alert = list_data[1]
+                    self.msg = data_base.delete_row_from_process_data_base(id_alert)
+
                 else:
                     self.msg = f"Unknown command: {command}"
 

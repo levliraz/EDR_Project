@@ -6,6 +6,7 @@ import encryption
 
 lock = Lock()
 
+
 class Server:
     def __init__(self):
         self.listening_socket = socket.socket()
@@ -14,27 +15,30 @@ class Server:
         self.msg = ""
         self.logged_in_users = {}  # email : socket
 
-        #שמירת last_id לכל משתמש
+        # שמירת last_id לכל משתמש
         # לכל משתמש נשמר ה־ID האחרון שנשלח אליו
         self.last_sent_alert_id_files = {}
 
         self.last_sent_alert_id_process = {}
 
         self.agent_dic = {}
+        # self.user_dic = {}
         self.mac_agent_user_dic = {}
+        # self.already_alerted_files = set()
 
         data_base.create_data_base()
 
-        #בצד השרת: יצירת זוג מפתחות
+        # בצד השרת: יצירת זוג מפתחות
         self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.public_key = self.private_key.public_key()
 
-        #set הוא קולקשן של ערכים ייחודיים ב־Python.
-        #לא מאפשר כפילויות – אם תנסה להוסיף את אותו ערך פעמיים, הוא יישאר רק פעם אחת.
-        #מאפשר בדיקה מהירה אם משהו קיים (value in my_set), הרבה יותר מהירה מ־list.
-        #אין סדר– אין אינדקסים, זה לא רשימה, רק אוסף של ערכים ייחודיים.
+        # set הוא קולקשן של ערכים ייחודיים ב־Python.
+        # לא מאפשר כפילויות – אם תנסה להוסיף את אותו ערך פעמיים, הוא יישאר רק פעם אחת.
+        # מאפשר בדיקה מהירה אם משהו קיים (value in my_set), הרבה יותר מהירה מ־list.
+        # אין סדר– אין אינדקסים, זה לא רשימה, רק אוסף של ערכים ייחודיים.
 
         # הפונקציה מקבלת לקוחות ומוסיפה אותם לשרת
+
     def start(self):
         print("Server is listening on port 1236...")
         while True:
@@ -54,7 +58,6 @@ class Server:
         pem_public = encryption.server_asymmetric_encryption(self.public_key)
         client_socket.sendall(pem_public)
 
-
         try:
             client_status = client_socket.recv(1024).decode()
 
@@ -68,17 +71,18 @@ class Server:
                 client_socket.send("agent,your key has arrived".encode())
 
                 decrypt_agent_id = client_socket.recv(1024)
-                agent_id = encryption.symmetric_decrypt_for_agent_server_message(decrypted_fernet_agent_key,  decrypt_agent_id)
+                agent_id = encryption.symmetric_decrypt_for_agent_server_message(decrypted_fernet_agent_key,
+                                                                                 decrypt_agent_id)
 
                 client_socket.send("Hi agent_id".encode())
 
-                #strip() היא פונקציה שמסירה רווחים ותווי ירידת שורה (\n, \r, \t) מתחילת וסוף המחרוזת.
-                mac_agent = client_socket.recv(1024).decode('utf-8').strip()  # קוראים את ה-MAC ששלח הסוכן וממירים ל-string
+                # strip() היא פונקציה שמסירה רווחים ותווי ירידת שורה (\n, \r, \t) מתחילת וסוף המחרוזת.
+                mac_agent = client_socket.recv(1024).decode(
+                    'utf-8').strip()  # קוראים את ה-MAC ששלח הסוכן וממירים ל-string
 
                 client_socket.send("i got your mac".encode())  # מאשרים לסוכן שקיבלנו
 
-
-                #מונע מצב ששני threads יעדכנו את אותו MAC בו זמנית
+                # מונע מצב ששני threads יעדכנו את אותו MAC בו זמנית
                 # חשוב כי כמה Agents יכולים להתחבר במקביל
                 with lock:
 
@@ -98,7 +102,6 @@ class Server:
 
                     print("UPDATED mac_agent_user_dic:", self.mac_agent_user_dic)
 
-
                 # הוספתי למילון מפתח שהוא הuser_id והערך שלו הוא הסוקט של הלקוח המחובר כרגע
                 # שמירת socket לפי agent_id
                 self.agent_dic[agent_id] = client_socket
@@ -107,17 +110,22 @@ class Server:
 
             elif client_status == "GUI":
                 client_socket.send("welcome client!".encode())
+                decrypt_user_id = client_socket.recv(1024)
+                user_id = encryption.decryption_data_in_server(self.private_key, decrypt_user_id).decode()
+                print(f"GUI connected with user_id = {user_id}")
+                client_socket.send("Hi user_id".encode())
 
                 mac_user = client_socket.recv(1024).decode('utf-8').strip()
                 client_socket.send("i got your mac".encode())
 
-                self.link_user_to_agent_session(client_socket, mac_user)
-
+                self.link_user_to_agent_session(user_id, mac_user)
+                # self.link_user_to_agent_session(client_socket, mac_user)
 
             while True:
                 if client_status == "Agent":
                     encrypted_data = client_socket.recv(1024)
-                    data = encryption.symmetric_decrypt_for_agent_server_message(decrypted_fernet_agent_key, encrypted_data)
+                    data = encryption.symmetric_decrypt_for_agent_server_message(decrypted_fernet_agent_key,
+                                                                                 encrypted_data)
                     if not data:
                         print("Agent disconnected")
                         return
@@ -136,17 +144,17 @@ class Server:
                         if email:
                             self.logged_in_users.pop(email, None)
 
-                        if mac_user and mac_user in self.last_sent_alert_id_files:
-                            del self.last_sent_alert_id_files[mac_user]
+                        if user_id and user_id in self.last_sent_alert_id_files:
+                            del self.last_sent_alert_id_files[user_id]
 
-                        if mac_user and mac_user in self.last_sent_alert_id_process:
-                            del self.last_sent_alert_id_process[mac_user]
+                        if user_id and user_id in self.last_sent_alert_id_process:
+                            del self.last_sent_alert_id_process[user_id]
                         return
 
                     decrypted_bytes = encryption.decryption_data_in_server(self.private_key, data)
 
                     try:
-                        #המרה מטיפוס bytes לטיפוס utf-8 - str
+                        # המרה מטיפוס bytes לטיפוס utf-8 - str
                         list_data = decrypted_bytes.decode("utf-8").split('|')
                     except UnicodeDecodeError:
                         print("Cannot decode decrypted_bytes:", decrypted_bytes)
@@ -157,10 +165,21 @@ class Server:
                 command = list_data[0]
 
                 if command == "file":
+                    # f"file|{self.agent_id}|{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}|{file['type']}|{file['file_name']}|{file['full_path']}|{file['risk_score']}|{','.join(file['reasons'])}|in_progress"
+                    agent_id = list_data[1]
+                    file_name = list_data[4]
+
+                    # if (agent_id, file_name) not in self.already_alerted_files:
+                    #     self.msg = data_base.handle_files_alerts(list_data)
+                    #     self.already_alerted_files.add((agent_id, file_name))
                     self.msg = data_base.handle_files_alerts(list_data)
+                    # else:
+                    # self.msg = f"File {file_name} already reported for this agent."
+
 
                 elif command == "process":
                     self.msg = data_base.handle_process_alerts(list_data)
+
 
                 elif command == "login":
                     email = list_data[2]
@@ -180,10 +199,10 @@ class Server:
                     self.msg = data_base.handle_register(list_data)
 
                 elif command == "get_files_alerts":
-                    mac_user = list_data[4]
-                    print(f"get_alerts requested by mac_user = {mac_user}")
+                    user_id = list_data[4]
+                    print(f"get_alerts requested by user_id = {user_id}")
                     # שליפה ממסד הנתונים
-                    alerts = self.get_alerts_for_user(client_socket, command)
+                    alerts = self.get_alerts_for_user(user_id, command)
 
                     print("alerts:", alerts)
 
@@ -192,14 +211,14 @@ class Server:
                         continue
 
                     rows_as_strings = ["|".join(row) for row in alerts]
-                    print("rows_as_strings:",rows_as_strings)
+                    print("rows_as_strings:", rows_as_strings)
                     self.msg = "||".join(rows_as_strings)
 
                 elif command == "get_process_alerts":
-                    mac_user = list_data[4]
-                    print(f"get_alerts requested by mac_user = {mac_user}")
+                    user_id = list_data[4]
+                    print(f"get_alerts requested by user_id = {user_id}")
                     # שליפה ממסד הנתונים
-                    alerts = self.get_alerts_for_user(client_socket, command)
+                    alerts = self.get_alerts_for_user(user_id, command)
 
                     print("alerts:", alerts)
 
@@ -214,11 +233,11 @@ class Server:
 
                 elif command == "delete_alert":
                     id_alert = list_data[1]
-                    #משתמשים בdiscard כי אם הקובץ כבר לא נמצא ב־set,לא תהיה שגיאה והשרת לא יתקע
+                    # משתמשים בdiscard כי אם הקובץ כבר לא נמצא ב־set,לא תהיה שגיאה והשרת לא יתקע
                     # שימוש ב-discard כדי למנוע קריסה אם הערך לא קיים
-                    #self.already_alerted_files.discard((agent_id, file_name))
+                    # self.already_alerted_files.discard((agent_id, file_name))
 
-                    #קוראים לפעולה שמוחקת שורה ממסד הנתונים
+                    # קוראים לפעולה שמוחקת שורה ממסד הנתונים
                     self.msg = data_base.delete_row_from_data_base(id_alert)
 
                 elif command == "delete_process_alert":
@@ -235,29 +254,25 @@ class Server:
 
         except Exception as e:
             print(f"Error: {e}")
-
         finally:
             try:
-                for mac, data in self.mac_agent_user_dic.items():
-                    if client_socket in data["users"]:
-                        data["users"].remove(client_socket)
 
                 if email:
                     self.logged_in_users.pop(email, None)
 
-                if client_socket and client_socket in self.last_sent_alert_id_files:
-                    del self.last_sent_alert_id_files[client_socket]
+                if user_id and user_id in self.last_sent_alert_id_files:
+                    del self.last_sent_alert_id_files[user_id]
 
-                if client_socket and client_socket in self.last_sent_alert_id_process:
-                    del self.last_sent_alert_id_process[client_socket]
+                if user_id and user_id in self.last_sent_alert_id_process:
+                    del self.last_sent_alert_id_process[user_id]
+
 
             except Exception as e:
                 print("finally error:", e)
 
             print(f"Connection with {client_address} closed")
 
-
-    def link_user_to_agent_session(self, client_socket, mac_user):
+    def link_user_to_agent_session(self, user_id, mac_user):
         # ניקוי רווחים מה-MAC
         mac = mac_user
 
@@ -271,38 +286,45 @@ class Server:
                     "users": []
                 }
 
-            if client_socket not in self.mac_agent_user_dic[mac]["users"]:
-                # מוסיפים אותו
-                self.mac_agent_user_dic[mac]["users"].append(client_socket)
+            # if client_socket not in self.mac_agent_user_dic[mac]["users"]:
+            #     # מוסיפים אותו
+            #     self.mac_agent_user_dic[mac]["users"].append(client_socket)
+            #
+            #     print(f"Added user {client_socket} to MAC {mac}")
+            #
+            # print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
 
-                print(f"Added user {client_socket} to MAC {mac}")
+            # אם המשתמש עדיין לא קיים ברשימה
+            if user_id not in self.mac_agent_user_dic[mac]["users"]:
+                # מוסיפים אותו
+                self.mac_agent_user_dic[mac]["users"].append(user_id)
+
+                print(f"Added user {user_id} to MAC {mac}")
 
         print("self.mac_agent_user_dic →", self.mac_agent_user_dic)
 
-
-    def get_alerts_for_user(self, client_socket, command):
-        print(f"Searching alerts for user {client_socket}")
+    def get_alerts_for_user(self, user_id, command):
+        print(f"Searching alerts for user {user_id}")
         print("Current MAC dictionary:", self.mac_agent_user_dic)
         agent_id = None
 
-        with lock:
-            for mac, data in self.mac_agent_user_dic.items():
-                print(
-                    f"Checking MAC={mac}, users={data['users']}, "
-                    f"agent_id={data['agent_id']}"
-                )
-                if client_socket in data["users"]:
-                    agent_id = data["agent_id"]
-                    print(f"Found matching agent_id = {agent_id}")
-                    break
+        for mac, data in self.mac_agent_user_dic.items():
+            print(
+                f"Checking MAC={mac}, users={data['users']}, "
+                f"agent_id={data['agent_id']}"
+            )
+            if user_id in data["users"]:
+                agent_id = data["agent_id"]
+                print(f"Found matching agent_id = {agent_id}")
+                break
 
-        if agent_id is None:
-            print(f"No agent found for user {client_socket}")
+        if not agent_id:
+            print(f"No agent found for user {user_id}")
             return []
 
         if command == "get_files_alerts":
             # ה-ID האחרון שכבר נשלח למשתמש
-            last_id = self.last_sent_alert_id_files.get(client_socket, 0)
+            last_id = self.last_sent_alert_id_files.get(user_id, 0)
 
             # שליפת רק התרעות חדשות
             alerts = data_base.get_alerts_about_files(agent_id, last_id)
@@ -313,7 +335,7 @@ class Server:
             for alert in alerts:
                 row = [
                     str(alert[0]),  # id
-                    str(alert[1]),  #agent_id
+                    str(alert[1]),  # agent_id
                     str(alert[2]),  # time
                     str(alert[3]),  # type
                     str(alert[4]),  # file name
@@ -329,14 +351,14 @@ class Server:
             if alerts:
                 last_alert_id = alerts[-1][0]
 
-                self.last_sent_alert_id_files[client_socket] = last_alert_id
+                self.last_sent_alert_id_files[user_id] = last_alert_id
 
             print("result:", result)
             return result
 
         else:
             # ה-ID האחרון שכבר נשלח למשתמש
-            last_id = self.last_sent_alert_id_process.get(client_socket, 0)
+            last_id = self.last_sent_alert_id_process.get(user_id, 0)
             # שליפת רק התרעות חדשות
             alerts = data_base.get_alerts_about_process(agent_id, last_id)
             print("alerts1:", alerts)
@@ -361,7 +383,7 @@ class Server:
             if alerts:
                 last_alert_id = alerts[-1][0]
 
-                self.last_sent_alert_id_process[client_socket] = last_alert_id
+                self.last_sent_alert_id_process[user_id] = last_alert_id
 
             print("result:", result)
             return result
